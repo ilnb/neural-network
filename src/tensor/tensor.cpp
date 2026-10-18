@@ -66,15 +66,16 @@ namespace NN {
   }
 
   void Tensor::finalize_shape(const size_t n, const bool clear) {
-    num_el = n;
+    num_el = clear ? 0 : n;
     strides.resize(shape.size());
     for (size_t i = 0, tmp = num_el; i < shape.size(); i++) {
       tmp /= shape[i];
       strides[i] = tmp;
     }
-    data.resize(num_el);
     if (clear)
       data.clear();
+    else
+      data.resize(n);
   }
 
   std::vector<size_t> Tensor::broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b) {
@@ -103,9 +104,10 @@ namespace NN {
   }
 
   Tensor &Tensor::set_data(std::vector<dtype> &&v) {
-    if (num_el != v.size())
+    if (v.size() != checked_num_el(shape))
       throw std::invalid_argument("Data vectors are of different size.");
     data = std::move(v);
+    num_el = data.size();
     return *this;
   }
 
@@ -138,7 +140,7 @@ namespace NN {
     return c;
   }
 
-  bool Tensor::empty() const { return num_el == 0 or data.size() == 0; }
+  bool Tensor::empty() const { return num_el == 0; }
 
   dtype Tensor::sum() const {
     if (empty())

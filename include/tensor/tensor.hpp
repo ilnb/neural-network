@@ -60,9 +60,10 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, dtype> and std::ranges::sized_range<R>
     Tensor &set_data(R &&r) {
-      if (std::ranges::size(r) != num_el)
+      if (std::ranges::size(r) != checked_num_el(shape))
         throw std::invalid_argument("Data ranges are of different size.");
       data.assign_range(r);
+      num_el = data.size();
       return *this;
     }
 
@@ -130,14 +131,15 @@ namespace NN {
       const size_t n = checked_num_el(r);
       if (n != num_el)
         throw std::invalid_argument("Incompatible target shape.");
-      auto it = std::ranges::begin(r);
-      size_t acc = 1;
-      for (size_t i = std::ranges::size(r); i-- > 0;) {
-        shape[i] = it[i];
-        strides[i] = acc;
-        acc *= it[i];
-      }
+      shape.assign_range(r);
+      finalize_shape(n, false);
       return *this;
+    }
+
+    template <typename... Args>
+      requires(std::integral<Args> and ...)
+    Tensor &reshape(Args... dims) {
+      return reshape(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(dims)...});
     }
 
     template <typename T>
