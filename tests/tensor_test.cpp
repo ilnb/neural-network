@@ -106,5 +106,21 @@ int main() {
     println("data : {}", tmp.data);
     println();
   }
+
+  {
+    std::println("MATMUL");
+    Tensor u(1, 2, 1, 2);
+    u.set_data(1, 2, 3, 4);
+    Tensor v(2, 2, 2, 1);
+    v.set_data(8, 7, 6, 5, 4, 3, 2, 1);
+
+    println("u shape: {}\nu  data: {}\n", u.shape, u.data);
+    println("v shape: {}\nv  data: {}\n", v.shape, v.data);
+
+    auto c = Tensor::matmul(u, v);
+    std::println("a @ b:");
+    std::println("shape: {}", c.shape);
+    std::println(" data: {}", c.data);
+  }
   return 0;
 }

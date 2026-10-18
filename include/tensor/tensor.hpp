@@ -470,14 +470,14 @@ namespace NN {
       const auto bs = aligned_strides(b, shape);
 
       for (size_t i = 0; i < num_el; i++) {
-        size_t ob = 0, tmp = i;
+        size_t off = 0, tmp = i;
         for (size_t k = 0; k < shape.size(); k++) {
           const size_t c = tmp / strides[k];
           tmp %= strides[k];
-          ob += c * bs[k];
+          off += c * bs[k];
         }
 
-        data[i] = op(data[i], b.data[ob]);
+        data[i] = op(data[i], b.data[off]);
       }
       return *this;
     }
@@ -493,15 +493,15 @@ namespace NN {
 
       Tensor ret(std::move(out));
       for (size_t i = 0; i < ret.num_el; i++) {
-        size_t oa = 0, ob = 0, tmp = i;
+        size_t a_off = 0, b_off = 0, tmp = i;
         for (size_t k = 0; k < out_sz; k++) {
           const size_t c = tmp / ret.strides[k];
           tmp %= ret.strides[k];
-          oa += c * as[k];
-          ob += c * bs[k];
+          a_off += c * as[k];
+          b_off += c * bs[k];
         }
 
-        ret.data[i] = op(a.data[oa], b.data[ob]);
+        ret.data[i] = op(a.data[a_off], b.data[b_off]);
       }
       return ret;
     }
@@ -525,7 +525,27 @@ namespace NN {
     // Right-aligned broadcast of two shapes.
     //
     // Throws `std::invalid_argument` if the shapes are incompatible.
-    static std::vector<size_t> broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b);
+    template <typename R1, typename R2>
+      requires ConvIntervalOf<R1, size_t> and ConvIntervalOf<R2, size_t> and std::integral<std::ranges::range_value_t<R1>> and std::integral<std::ranges::range_value_t<R2>> and
+               std::ranges::sized_range<R1> and std::ranges::sized_range<R2>
+    static std::vector<size_t> broadcast_shape(R1 &&a, R2 &&b) {
+      const auto asz = std::ranges::size(a);
+      const auto bsz = std::ranges::size(b);
+      const size_t n = std::max(asz, bsz);
+      const size_t ao = n - asz, bo = n - bsz;
+
+      std::vector<size_t> out(n, 1);
+      auto ita = std::ranges::begin(a);
+      auto itb = std::ranges::begin(b);
+      for (size_t i = 0; i < n; i++) {
+        const size_t x = i < ao ? 1 : ita[i - ao];
+        const size_t y = i < bo ? 1 : itb[i - bo];
+        if (x != y and x != 1 and y != 1)
+          throw std::invalid_argument("Shapes not broadcastable.");
+        out[i] = std::max(x, y);
+      }
+      return out;
+    }
 
     // `t`'s strides right-aligned to `out`; 0 for broadcast axes.
     static std::vector<size_t> aligned_strides(const Tensor &t, const std::vector<size_t> &out);

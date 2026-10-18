@@ -2,7 +2,9 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace NN {
   Tensor &Tensor::operator=(const Tensor &b) {
@@ -68,7 +70,7 @@ namespace NN {
   void Tensor::finalize_shape(const size_t n, const bool clear) {
     num_el = clear ? 0 : n;
     strides.resize(shape.size());
-    for (size_t i = 0, tmp = num_el; i < shape.size(); i++) {
+    for (size_t i = 0, tmp = n; i < shape.size(); i++) {
       tmp /= shape[i];
       strides[i] = tmp;
     }
@@ -76,20 +78,6 @@ namespace NN {
       data.clear();
     else
       data.resize(n);
-  }
-
-  std::vector<size_t> Tensor::broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b) {
-    const size_t n = std::max(a.size(), b.size());
-    std::vector<size_t> out(n, 1);
-    const size_t ao = n - a.size(), bo = n - b.size();
-    for (size_t i = 0; i < n; i++) {
-      const size_t x = i < ao ? 1 : a[i - ao];
-      const size_t y = i < bo ? 1 : b[i - bo];
-      if (x != y and x != 1 and y != 1)
-        throw std::invalid_argument("Shapes not broadcastable.");
-      out[i] = std::max(x, y);
-    }
-    return out;
   }
 
   std::vector<size_t> Tensor::aligned_strides(const Tensor &t, const std::vector<size_t> &out) {
@@ -303,20 +291,60 @@ namespace NN {
   }
 
   Tensor &Tensor::matmul(const Tensor &b) {
-    if (shape.size() != 2 or b.shape.size() != 2)
-      throw std::invalid_argument("Tensor should be rank 2 for matmul");
-    if (shape[1] != b.shape[0])
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (shape.size() < 2 or b.shape.size() < 2)
+      throw std::domain_error("Cant matmul with a scalar.");
+
+    const size_t arank = shape.size(), brank = b.shape.size();
+    const size_t m = shape[arank - 2];
+    const size_t k = shape[arank - 1];
+    const size_t n = b.shape[brank - 1];
+
+    // A: [..., m, k]
+    // B: [..., k, n]
+    if (k != b.shape[brank - 2])
       throw std::invalid_argument("Incompatible tensors for matmul.");
 
-    Tensor ret(shape[0], b.shape[1]);
-    for (size_t i = 0; i < shape[0]; i++) {
-      for (size_t j = 0; j < b.shape[1]; j++) {
-        dtype sum = 0;
-        for (size_t k = 0; k < shape[1]; k++)
-          sum += at(i, k) * b.at(k, j);
-        ret.at(i, j) = sum;
+    auto a_shape = std::span(shape).first(shape.size() - 2);
+    auto b_shape = std::span(b.shape).first(b.shape.size() - 2);
+    auto batch = broadcast_shape(a_shape, b_shape);
+
+    const size_t a_pad = batch.size() - a_shape.size(), b_pad = batch.size() - b_shape.size();
+    std::vector<size_t> a_bs(batch.size()), b_bs(batch.size());
+    for (size_t i = 0; i < a_shape.size(); i++)
+      if (a_shape[i] != 1)
+        a_bs[a_pad + i] = strides[i];
+    for (size_t i = 0; i < b_shape.size(); i++)
+      if (b_shape[i] != 1)
+        b_bs[b_pad + i] = b.strides[i];
+
+    std::vector<size_t> out_shape = batch;
+    out_shape.push_back(m);
+    out_shape.push_back(n);
+    Tensor ret(std::move(out_shape));
+
+    size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
+    size_t b1 = b.strides[brank - 1], b2 = b.strides[brank - 2];
+
+    for (size_t idx = 0, cnt = ret.num_el / m / n; idx < cnt; idx++) {
+      size_t a_off = 0, b_off = 0, tmp = idx;
+      for (size_t d = batch.size(); d-- > 0;) {
+        const size_t c = tmp % batch[d];
+        tmp /= batch[d];
+        a_off += c * a_bs[d];
+        b_off += c * b_bs[d];
+      }
+      for (size_t i = 0; i < m; i++) {
+        for (size_t j = 0; j < n; j++) {
+          dtype sum = 0;
+          for (size_t t = 0; t < k; t++)
+            sum += data[a_off + i * a2 + t * a1] * b.data[b_off + t * b2 + j * b1];
+          ret.data[idx * m * n + i * n + j] = sum;
+        }
       }
     }
+
     *this = std::move(ret);
     return *this;
   }
