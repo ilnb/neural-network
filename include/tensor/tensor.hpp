@@ -38,6 +38,11 @@ namespace NN {
       finalize_shape(n, false);
     }
 
+    explicit Tensor(std::vector<size_t> &&v) : shape(std::move(v)) {
+      const size_t n = checked_num_el(shape);
+      finalize_shape(n, false);
+    }
+
     template <typename T>
       requires std::integral<T>
     explicit Tensor(std::initializer_list<T> l) : shape(l.begin(), l.end()) {
@@ -64,7 +69,7 @@ namespace NN {
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... vals) {
-      return set_data(std::array<dtype, sizeof...(Args)>{static_cast<dtype>(vals)...});
+      return set_data(std::vector<float>{static_cast<dtype>(vals)...});
     }
 
     Tensor &set_data(std::vector<dtype> &&v);
@@ -203,6 +208,8 @@ namespace NN {
     Tensor &operator+=(const Tensor &b);
     Tensor operator-(const Tensor &b) const;
     Tensor &operator-=(const Tensor &b);
+    Tensor operator*(const Tensor &b) const;
+    Tensor &operator*=(const Tensor &b);
 
   private:
     template <typename R>
@@ -269,10 +276,54 @@ namespace NN {
       return *this;
     }
 
+    template <typename Op>
+      requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
+    Tensor &binary_inplace(const Tensor &b, Op op) {
+      const auto bs = aligned_strides(b, shape);
+
+      for (size_t i = 0; i < num_el; i++) {
+        size_t ob = 0, tmp = i;
+        for (size_t k = 0; k < shape.size(); k++) {
+          const size_t c = tmp / strides[k];
+          tmp %= strides[k];
+          ob += c * bs[k];
+        }
+
+        data[i] = op(data[i], b.data[ob]);
+      }
+      return *this;
+    }
+
+    template <typename Op>
+      requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
+    static Tensor binary_broadcast(const Tensor &a, const Tensor &b, Op op) {
+      auto out = broadcast_shape(a.shape, b.shape);
+      const auto out_sz = out.size();
+      const auto as = aligned_strides(a, out);
+      const auto bs = aligned_strides(b, out);
+
+      Tensor ret(std::move(out));
+      for (size_t i = 0; i < ret.num_el; i++) {
+        size_t oa = 0, ob = 0, tmp = i;
+        for (size_t k = 0; k < out_sz; k++) {
+          const size_t c = tmp / ret.strides[k];
+          tmp %= ret.strides[k];
+          oa += c * as[k];
+          ob += c * bs[k];
+        }
+
+        ret.data[i] = op(a.data[oa], b.data[ob]);
+      }
+      return ret;
+    }
+
+    void valid_pair(const Tensor &b) const;
+    bool valid_strides() const;
     static std::vector<size_t> compute_strides(const std::vector<size_t> &shape);
     void assign_shape(std::vector<size_t> &&dims, const bool clear);
-    void valid_dim_pair(const Tensor &b) const;
-    bool valid_strides() const;
     void finalize_shape(size_t n, bool clear);
+    static std::vector<size_t> broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b);
+    // right aligned strides
+    static std::vector<size_t> aligned_strides(const Tensor &t, const std::vector<size_t> &out);
   };
 } // namespace NN

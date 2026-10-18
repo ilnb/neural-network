@@ -26,6 +26,29 @@ namespace NN {
     return *this;
   }
 
+  bool Tensor::valid_strides() const {
+    // NOTE: contiguous row-major; relax once non-contiguous views exist.
+    if (strides.size() != shape.size())
+      return false;
+    for (size_t i = shape.size(), acc = 1; i-- > 0;) {
+      if (strides[i] != acc)
+        return false;
+      acc *= shape[i];
+    }
+    return true;
+  }
+
+  void Tensor::valid_pair(const Tensor &b) const {
+    if (not valid_strides() or not b.valid_strides())
+      throw std::invalid_argument("Malformed strides.");
+
+    if (empty() or b.empty())
+      throw std::invalid_argument("Tensor data is not initialized.");
+
+    if (data.size() != num_el or b.data.size() != b.num_el)
+      throw std::logic_error("Malformed num_el or data.");
+  }
+
   std::vector<size_t> Tensor::compute_strides(const std::vector<size_t> &shape) {
     std::vector<size_t> strides(shape.size());
     size_t acc = 1;
@@ -54,30 +77,29 @@ namespace NN {
       data.clear();
   }
 
-  bool Tensor::valid_strides() const {
-    // NOTE: contiguous row-major; relax once non-contiguous views exist.
-    if (strides.size() != shape.size())
-      return false;
-    for (size_t i = shape.size(), acc = 1; i-- > 0;) {
-      if (strides[i] != acc)
-        return false;
-      acc *= shape[i];
+  std::vector<size_t> Tensor::broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b) {
+    const size_t n = std::max(a.size(), b.size());
+    std::vector<size_t> out(n, 1);
+    const size_t ao = n - a.size(), bo = n - b.size();
+    for (size_t i = 0; i < n; i++) {
+      const size_t x = i < ao ? 1 : a[i - ao];
+      const size_t y = i < bo ? 1 : b[i - bo];
+      if (x != y and x != 1 and y != 1)
+        throw std::invalid_argument("Shapes not broadcastable.");
+      out[i] = std::max(x, y);
     }
-    return true;
+    return out;
   }
 
-  void Tensor::valid_dim_pair(const Tensor &b) const {
-    if (shape != b.shape)
-      throw std::invalid_argument("Tensors of different shapes.");
-
-    if (not valid_strides() or not b.valid_strides())
-      throw std::invalid_argument("Malformed strides.");
-
-    if (empty() or b.empty())
-      throw std::invalid_argument("Tensor data is not initialized.");
-
-    if (num_el != b.num_el or data.size() != num_el or b.data.size() != b.num_el)
-      throw std::logic_error("Malformed num_el or data.");
+  std::vector<size_t> Tensor::aligned_strides(const Tensor &t, const std::vector<size_t> &out) {
+    if (out.size() < t.shape.size())
+      throw std::logic_error("Cant align strides to a lower rank shape.");
+    std::vector<size_t> s(out.size());
+    const size_t off = out.size() - t.shape.size();
+    for (size_t i = 0; i < t.shape.size(); i++)
+      if (t.shape[i] != 1)
+        s[off + i] = t.strides[i];
+    return s;
   }
 
   Tensor &Tensor::set_data(std::vector<dtype> &&v) {
@@ -193,9 +215,10 @@ namespace NN {
   }
 
   Tensor &Tensor::add(const Tensor &b) {
-    valid_dim_pair(b);
-    std::ranges::transform(data, b.data, data.begin(), std::plus<>());
-    return *this;
+    valid_pair(b);
+    if (broadcast_shape(shape, b.shape) != shape)
+      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+    return binary_inplace(b, std::plus<>());
   }
 
   Tensor Tensor::add(const Tensor &a, const Tensor &b) {
@@ -211,9 +234,8 @@ namespace NN {
   }
 
   Tensor Tensor::cadd(const Tensor &b) const {
-    auto c = *this;
-    c.add(b);
-    return c;
+    valid_pair(b);
+    return binary_broadcast(*this, b, std::plus<>());
   }
 
   Tensor &Tensor::sub(const dtype x) {
@@ -224,9 +246,10 @@ namespace NN {
   }
 
   Tensor &Tensor::sub(const Tensor &b) {
-    valid_dim_pair(b);
-    std::ranges::transform(data, b.data, data.begin(), std::minus<>());
-    return *this;
+    valid_pair(b);
+    if (broadcast_shape(shape, b.shape) != shape)
+      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+    return binary_inplace(b, std::minus<>());
   }
 
   Tensor Tensor::sub(const Tensor &a, const Tensor &b) {
@@ -242,15 +265,15 @@ namespace NN {
   }
 
   Tensor Tensor::csub(const Tensor &b) const {
-    auto c = *this;
-    c.sub(b);
-    return c;
+    valid_pair(b);
+    return binary_broadcast(*this, b, std::minus<>());
   }
 
   Tensor &Tensor::mul(const Tensor &b) {
-    valid_dim_pair(b);
-    std::ranges::transform(data, b.data, data.begin(), std::multiplies<>());
-    return *this;
+    valid_pair(b);
+    if (broadcast_shape(shape, b.shape) != shape)
+      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+    return binary_inplace(b, std::multiplies<>());
   }
 
   Tensor &Tensor::mul(const dtype x) {
@@ -273,9 +296,8 @@ namespace NN {
   }
 
   Tensor Tensor::cmul(const Tensor &b) const {
-    auto c = *this;
-    c.mul(b);
-    return c;
+    valid_pair(b);
+    return binary_broadcast(*this, b, std::multiplies<>());
   }
 
   Tensor &Tensor::matmul(const Tensor &b) {
@@ -321,11 +343,7 @@ namespace NN {
 
   Tensor &Tensor::operator+=(const dtype x) { return add(x); }
 
-  Tensor Tensor::operator+(const Tensor &b) const {
-    auto c = *this;
-    c.add(b);
-    return c;
-  }
+  Tensor Tensor::operator+(const Tensor &b) const { return cadd(b); }
 
   Tensor &Tensor::operator+=(const Tensor &b) { return add(b); }
 
@@ -341,17 +359,17 @@ namespace NN {
 
   Tensor &Tensor::operator-=(const Tensor &b) { return sub(b); }
 
-  Tensor Tensor::operator-(const Tensor &b) const {
-    auto c = *this;
-    c.sub(b);
-    return c;
-  }
+  Tensor Tensor::operator-(const Tensor &b) const { return csub(b); }
 
   Tensor Tensor::operator*(const dtype x) const { return cmul(x); }
 
   Tensor operator*(const dtype x, const Tensor &a) { return a.cmul(x); }
 
   Tensor &Tensor::operator*=(const dtype x) { return mul(x); }
+
+  Tensor Tensor::operator*(const Tensor &b) const { return cmul(b); }
+
+  Tensor &Tensor::operator*=(const Tensor &b) { return mul(b); }
 
   Tensor Tensor::operator/(const dtype x) const {
     if (x == 0)
