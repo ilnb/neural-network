@@ -82,7 +82,7 @@ namespace NN {
       finalize_shape(n, false);
     }
 
-    // Convenience constructor, directly takes values
+    // Convenience constructor, directly takes values.
     template <typename... Args>
       requires(std::integral<Args> and ...)
     explicit Tensor(Args... dims) : shape{static_cast<size_t>(dims)...} {
@@ -104,7 +104,7 @@ namespace NN {
       return *this;
     }
 
-    // Convenience form of `set_data` taking the values directly,
+    // Convenience form of `set_data` taking the values directly.
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... vals) {
@@ -150,21 +150,21 @@ namespace NN {
       return self.data.at(offset);
     }
 
-    // Element access with bounds checking
+    // Element access with bounds checking.
     template <typename Self, typename T>
       requires std::integral<T>
     decltype(auto) at(this Self &&self, std::initializer_list<T> l) {
       return self.template at<std::initializer_list<T> &>(l); // bounds above to itr-indexing
     }
 
-    // Element access with bounds checking
+    // Element access with bounds checking.
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
     decltype(auto) at(this Self &&self, Args... idx) {
       return self.at(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(idx)...});
     }
 
-    // Element access without bounds checking
+    // Element access without bounds checking.
     //
     // Throws `std::invalid_argument` if the number of indices
     // differs from the rank. Indices must be in range.
@@ -195,14 +195,14 @@ namespace NN {
       return *this;
     }
 
-    // Directly takes values for new shape
+    // Directly takes values for new shape.
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor &reshape(Args... dims) {
       return reshape(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(dims)...});
     }
 
-    // Reshapes in-place from an initializer list
+    // Reshapes in-place from an initializer list.
     template <typename T>
       requires std::integral<T>
     Tensor &reshape(std::initializer_list<T> l) {

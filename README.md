@@ -1,8 +1,8 @@
-# README
+## README
 
 Neural networks and stuff.
 
-# Build
+## Build
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release
