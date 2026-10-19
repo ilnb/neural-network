@@ -241,6 +241,9 @@ int main() {
 
     Tensor m(2, 2);
     m.set_data(1, 2, 3, 4);
+
+    println("m shape: {}\nm  data: {}\n", m.shape, m.data);
+
     m.permute(1, 0);
     println("in-place m.permute(1, 0):");
     println("shape: {}", m.shape);

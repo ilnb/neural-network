@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <limits>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -109,7 +110,7 @@ namespace NN {
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... vals) {
-      return set_data(std::vector<float>{static_cast<dtype>(vals)...});
+      return set_data(std::vector<dtype>{static_cast<dtype>(vals)...});
     }
 
     // Moves `v` into `data`. `v` must have exactly `num_el` elements.
@@ -123,7 +124,7 @@ namespace NN {
     // Throws `std::invalid_argument` if the range is empty or contains a 0,
     // and `std::overflow_error` if the element count overflows `size_t`.
     template <typename R>
-      requires std::integral<std::ranges::range_value_t<R>>
+      requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
     Tensor &set_dims(R &&r, const bool clear = true) {
       assign_shape(std::forward<R>(r), clear);
       return *this;
@@ -252,7 +253,7 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
     Tensor &permute(R &&perm) {
-      *this = permuted(std::forward<R>(perm));
+      *this = h_permute(std::forward<R>(perm));
       return *this;
     }
 
@@ -274,7 +275,7 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
     Tensor cpermute(R &&perm) const {
-      return permuted(std::forward<R>(perm));
+      return h_permute(std::forward<R>(perm));
     }
 
     // Copy-permute from an initializer list.
@@ -366,10 +367,15 @@ namespace NN {
     // In-place element-wise multiply with broadcasting.
     Tensor &mul(const Tensor &b);
 
-    // Rank-2 in-place matrix product.
+    // In-place matrix product.
     //
-    // Throws `std::invalid_argument` if either tensor is not rank 2 or the
-    // inner dimensions differ.
+    // `*this` and `b` must both be at least rank 2, with shapes `[..., m, k]`
+    // and `[..., k, n]`. Leading batch dimensions broadcast right-aligned and
+    // the result has shape `[...broadcast, m, n]`.
+    //
+    // Throws `std::domain_error` if either tensor is below rank 2, and
+    // `std::invalid_argument` if the inner dimensions differ or the batch
+    // dimensions cannot broadcast or if either tensor is empty or malformed.
     Tensor &matmul(const Tensor &b);
 
     // Returns a copy with scalar `x` added.
@@ -390,19 +396,20 @@ namespace NN {
     // Copy element-wise multiply with full broadcasting.
     Tensor cmul(const Tensor &b) const;
 
-    // Copy matrix product. Rank 2 only.
+    // Copy matrix product. See `matmul(const Tensor &)` for the shape rules.
     Tensor cmatmul(const Tensor &b) const;
 
-    // Returns `a + b` as a new tensor, broadcasting fully.
+    // Returns `a + b` as a new tensor with full broadcasting.
     static Tensor add(const Tensor &a, const Tensor &b);
 
-    // Returns `a - b` as a new tensor, broadcasting fully.
+    // Returns `a - b` as a new tensor with full broadcasting.
     static Tensor sub(const Tensor &a, const Tensor &b);
 
-    // Returns `a * b` element-wise as a new tensor, broadcasting fully.
+    // Returns `a * b` element-wise as a new tensor with full broadcasting.
     static Tensor mul(const Tensor &a, const Tensor &b);
 
-    // Returns the matrix product `a * b`. Rank 2 only.
+    // Returns the matrix product `a * b`. See `matmul(const Tensor &)` for the
+    // shape rules.
     static Tensor matmul(const Tensor &a, const Tensor &b);
 
     // Unary negation; returns a new tensor.
@@ -493,11 +500,11 @@ namespace NN {
       return n;
     }
 
-    // In-place reduction of axis `dim` using `op`, starting from `init`.
-    // Removes the axis and rebuilds `*this`.
+    // HELPERS
+
     template <typename Op>
       requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
-    Tensor &reduce(size_t dim, dtype init, Op op) {
+    Tensor h_reduce(size_t dim, dtype init, Op op) const {
       if (empty())
         throw std::domain_error("Cant reduce an empty tensor.");
       const size_t n = shape.size();
@@ -512,17 +519,17 @@ namespace NN {
         if (i != dim)
           new_size.push_back(shape[i]);
 
-      Tensor ret(new_size);
+      Tensor ret(std::move(new_size));
       for (size_t out = 0; out < ret.num_el; out++) {
         size_t offset = 0, tmp = out;
 
-        for (size_t i = 0, j = 0; i < n; i++) {
+        for (size_t i = n, j = ret.shape.size(); i-- > 0;) {
           if (i == dim)
             continue;
-          const size_t c = tmp / ret.strides[j];
-          tmp %= ret.strides[j];
+          j--;
+          const size_t c = tmp % ret.shape[j];
+          tmp /= ret.shape[j];
           offset += c * strides[i];
-          j++;
         }
 
         auto val = init;
@@ -531,20 +538,20 @@ namespace NN {
         ret.data[out] = val;
       }
 
-      *this = std::move(ret);
-      return *this;
+      return ret;
     }
 
-    // Helper to skip unnecessary allocations
+    Tensor h_mean(size_t dim) const;
+
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor permuted(R &&perm) const {
+    Tensor h_permute(R &&perm) const {
       if (empty())
         throw std::invalid_argument("Empty tensor.");
       const size_t n = shape.size();
       if (std::ranges::size(perm) != n)
         throw std::invalid_argument("`perm` needs to be of the same size.");
-      if (!std::ranges::is_permutation(perm, std::views::iota(0uz, n)))
+      if (not std::ranges::is_permutation(perm, std::views::iota(0uz, n)))
         throw std::invalid_argument("`perm` is not a permutation.");
 
       std::vector<size_t> new_shape(n);
@@ -566,18 +573,31 @@ namespace NN {
       return ret;
     }
 
+    Tensor h_transpose() const;
+
+    Tensor h_cat(const Tensor &b, size_t dim) const;
+
+    Tensor h_stack(const Tensor &b, size_t dim) const;
+
+    Tensor h_matmul(const Tensor &b) const;
+
     // Applies `op(data[i], b[offset])` in-place, with `b` broadcast into `*this`.
-    // Requires `broadcast_shape(shape, b.shape) == shape`.
+    // Requires `broadcasts_into(shape, b.shape)`.
     template <typename Op>
       requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
     Tensor &binary_inplace(const Tensor &b, Op op) {
-      const auto bs = aligned_strides(b, shape);
+      std::vector<size_t> scratch;
+      std::span<const size_t> bs = b.strides;
+      if (b.shape != shape) {
+        scratch = aligned_strides(b, shape);
+        bs = scratch;
+      }
 
       for (size_t i = 0; i < num_el; i++) {
         size_t off = 0, tmp = i;
-        for (size_t k = 0; k < shape.size(); k++) {
-          const size_t c = tmp / strides[k];
-          tmp %= strides[k];
+        for (size_t k = shape.size(); k-- > 0;) {
+          const size_t c = tmp % shape[k];
+          tmp /= shape[k];
           off += c * bs[k];
         }
 
@@ -592,15 +612,25 @@ namespace NN {
     static Tensor binary_broadcast(const Tensor &a, const Tensor &b, Op op) {
       auto out = broadcast_shape(a.shape, b.shape);
       const auto out_sz = out.size();
-      const auto as = aligned_strides(a, out);
-      const auto bs = aligned_strides(b, out);
+
+      std::vector<size_t> a_scratch, b_scratch;
+      std::span<const size_t> as = a.strides;
+      std::span<const size_t> bs = b.strides;
+      if (a.shape != out) {
+        a_scratch = aligned_strides(a, out);
+        as = a_scratch;
+      }
+      if (b.shape != out) {
+        b_scratch = aligned_strides(b, out);
+        bs = b_scratch;
+      }
 
       Tensor ret(std::move(out));
       for (size_t i = 0; i < ret.num_el; i++) {
         size_t a_off = 0, b_off = 0, tmp = i;
-        for (size_t k = 0; k < out_sz; k++) {
-          const size_t c = tmp / ret.strides[k];
-          tmp %= ret.strides[k];
+        for (size_t k = out_sz; k-- > 0;) {
+          const size_t c = tmp % ret.shape[k];
+          tmp /= ret.shape[k];
           a_off += c * as[k];
           b_off += c * bs[k];
         }
@@ -609,6 +639,9 @@ namespace NN {
       }
       return ret;
     }
+
+    // True if `b` broadcasts into `s` without changing its shape.
+    static bool broadcasts_into(const std::vector<size_t> &s, const std::vector<size_t> &b);
 
     // Throws unless both tensors have valid strides and consistent storage,
     // and neither is empty. Does not compare shapes.
