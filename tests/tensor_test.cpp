@@ -121,6 +121,49 @@ int main() {
     std::println("a @ b:");
     std::println("shape: {}", c.shape);
     std::println(" data: {}", c.data);
+    println();
+  }
+
+  {
+    println("CONCAT");
+    Tensor a(2, 2), b(2, 3);
+    a.set_data(1, 2, 3, 4);
+    b.set_data(5, 6, 7, 8, 9, 10);
+
+    println("a shape: {}\na  data: {}\n", a.shape, a.data);
+    println("b shape: {}\nb  data: {}\n", b.shape, b.data);
+
+    auto t = a.ccat(b, 1);
+    println("a.cat(b, 1):");
+    println("shape: {}", t.shape);
+    println("data : {}\n", t.data);
+
+    t.cat(t, 1);
+    println("t.cat(t, 1):");
+    println("shape: {}", t.shape);
+    println("data : {}\n", t.data);
+
+    Tensor c(3, 2, 2), d(3, 1, 2);
+    c.set_data(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    d.set_data(13, 14, 15, 16, 17, 18);
+
+    auto u = c.ccat(d, 1);
+    println("c.cat(d, 1):");
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    Tensor e(3, 2);
+    try {
+      a.cat(e, 1);
+    } catch (const std::invalid_argument &ex) {
+      println("cat mismatch: {}", ex.what());
+    }
+    try {
+      a.cat(b, 7);
+    } catch (const std::out_of_range &ex) {
+      println("cat dim oob: {}", ex.what());
+    }
+    println();
   }
   return 0;
 }

@@ -218,6 +218,19 @@ namespace NN {
     // Copy-transpose.
     Tensor ctranspose() const;
 
+    // Concatenates `b` onto this tensor along the existing dimension `dim`.
+    // Every dimension is kept, and `dim` holds `shape[dim] + b.shape[dim]`.
+    //
+    // The tensors must have equal rank and match on every dimension but `dim`.
+    //
+    // Throws `std::out_of_range` if `dim >= rank`, and `std::invalid_argument`
+    // if the ranks differ, any dimension other than `dim` differs,
+    // or either tensor is empty.
+    Tensor &cat(const Tensor &b, size_t dim);
+
+    // Copycat.
+    Tensor ccat(const Tensor &b, size_t dim) const;
+
     // True if the tensor holds no elements.
     bool empty() const;
 

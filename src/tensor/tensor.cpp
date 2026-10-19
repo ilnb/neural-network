@@ -128,6 +128,52 @@ namespace NN {
     return c;
   }
 
+  Tensor &Tensor::cat(const Tensor &b, size_t dim) {
+    if (dim >= shape.size())
+      throw std::out_of_range("dim is out of bounds.");
+    if (shape.size() != b.shape.size())
+      throw std::invalid_argument("b is not of the same rank.");
+    for (size_t i = 0; i < shape.size(); i++)
+      if (i != dim and shape[i] != b.shape[i])
+        throw std::invalid_argument("Dimensions other than dim should be equal.");
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+
+    size_t inner = 1;
+    for (size_t i = dim + 1; i < shape.size(); i++)
+      inner *= shape[i];
+    size_t outer = num_el / inner / shape[dim];
+    const size_t a_sz = shape[dim] * inner;
+    const size_t b_sz = b.shape[dim] * inner;
+
+    auto new_shape = shape;
+    new_shape[dim] += b.shape[dim];
+    Tensor ret(std::move(new_shape));
+
+    for (size_t idx = 0; idx < outer; idx++) {
+      size_t a_off = 0, b_off = 0;
+      for (size_t i = dim, tmp = idx; i-- > 0;) {
+        const size_t c = tmp % shape[i];
+        a_off += c * strides[i];
+        b_off += c * b.strides[i];
+        tmp /= shape[i];
+      }
+
+      const size_t ret_off = idx * (a_sz + b_sz);
+      std::copy_n(data.begin() + a_off, a_sz, ret.data.begin() + ret_off);
+      std::copy_n(b.data.begin() + b_off, b_sz, ret.data.begin() + ret_off + a_sz);
+    }
+
+    *this = std::move(ret);
+    return *this;
+  }
+
+  Tensor Tensor::ccat(const Tensor &b, size_t dim) const {
+    auto c = *this;
+    c.cat(b, dim);
+    return c;
+  }
+
   bool Tensor::empty() const { return num_el == 0; }
 
   dtype Tensor::sum() const {
