@@ -2,7 +2,9 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace NN {
   Tensor &Tensor::operator=(const Tensor &b) {
@@ -38,15 +40,14 @@ namespace NN {
     return true;
   }
 
-  void Tensor::valid_pair(const Tensor &b) const {
-    if (not valid_strides() or not b.valid_strides())
-      throw std::invalid_argument("Malformed strides.");
-
-    if (empty() or b.empty())
-      throw std::invalid_argument("Tensor data is not initialized.");
-
-    if (data.size() != num_el or b.data.size() != b.num_el)
-      throw std::logic_error("Malformed num_el or data.");
+  bool Tensor::broadcasts_into(const std::vector<size_t> &s, const std::vector<size_t> &b) {
+    if (b.size() > s.size())
+      return false;
+    const size_t off = s.size() - b.size();
+    for (size_t i = 0; i < b.size(); i++)
+      if (b[i] != 1 and b[i] != s[off + i])
+        return false;
+    return true;
   }
 
   std::vector<size_t> Tensor::compute_strides(const std::vector<size_t> &shape) {
@@ -68,7 +69,7 @@ namespace NN {
   void Tensor::finalize_shape(const size_t n, const bool clear) {
     num_el = clear ? 0 : n;
     strides.resize(shape.size());
-    for (size_t i = 0, tmp = num_el; i < shape.size(); i++) {
+    for (size_t i = 0, tmp = n; i < shape.size(); i++) {
       tmp /= shape[i];
       strides[i] = tmp;
     }
@@ -76,20 +77,6 @@ namespace NN {
       data.clear();
     else
       data.resize(n);
-  }
-
-  std::vector<size_t> Tensor::broadcast_shape(const std::vector<size_t> &a, const std::vector<size_t> &b) {
-    const size_t n = std::max(a.size(), b.size());
-    std::vector<size_t> out(n, 1);
-    const size_t ao = n - a.size(), bo = n - b.size();
-    for (size_t i = 0; i < n; i++) {
-      const size_t x = i < ao ? 1 : a[i - ao];
-      const size_t y = i < bo ? 1 : b[i - bo];
-      if (x != y and x != 1 and y != 1)
-        throw std::invalid_argument("Shapes not broadcastable.");
-      out[i] = std::max(x, y);
-    }
-    return out;
   }
 
   std::vector<size_t> Tensor::aligned_strides(const Tensor &t, const std::vector<size_t> &out) {
@@ -123,24 +110,149 @@ namespace NN {
       throw std::invalid_argument("Empty tensor.");
     if (data.size() != num_el)
       throw std::invalid_argument("Malformed tensor data.");
+
     const size_t r = shape[0], c = shape[1];
-    std::vector<dtype> out(num_el);
-    for (size_t i = 0; i < r; i++)
-      for (size_t j = 0; j < c; j++)
-        out[j * r + i] = data[i * c + j];
-    data = std::move(out);
-    std::ranges::reverse(shape);
-    strides = compute_strides(shape);
+    std::vector<bool> seen(num_el, false);
+    for (size_t s = 0; s < num_el; s++) {
+      if (seen[s])
+        continue;
+      size_t cur = s;
+      dtype hold = data[s];
+      do {
+        seen[cur] = true;
+        const size_t next = (cur % c) * r + cur / c;
+        std::swap(hold, data[next]);
+        cur = next;
+      } while (cur != s);
+    }
+    std::swap(shape[0], shape[1]);
+    strides[0] = r, strides[1] = 1;
     return *this;
   }
 
-  Tensor Tensor::ctranspose() const {
-    auto c = *this;
-    c.transpose();
-    return c;
+  Tensor Tensor::ctranspose() const { return h_transpose(); }
+
+  Tensor Tensor::h_transpose() const {
+    if (shape.size() != 2)
+      throw std::invalid_argument("Transpose requires 2D tensor.");
+    if (empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (data.size() != num_el)
+      throw std::invalid_argument("Malformed tensor data.");
+
+    const size_t r = shape[0], c = shape[1];
+    Tensor ret(c, r);
+    for (size_t t = 0; t < num_el; t++)
+      ret.data[t] = data[(t % r) * c + t / r];
+    return ret;
+  }
+
+  Tensor &Tensor::cat(const Tensor &b, size_t dim) {
+    *this = h_cat(b, dim);
+    return *this;
+  }
+
+  Tensor Tensor::ccat(const Tensor &b, size_t dim) const { return h_cat(b, dim); }
+
+  Tensor Tensor::h_cat(const Tensor &b, size_t dim) const {
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (dim >= shape.size())
+      throw std::out_of_range("dim is out of bounds.");
+    if (shape.size() != b.shape.size())
+      throw std::invalid_argument("b is not of the same rank.");
+    for (size_t i = 0; i < shape.size(); i++)
+      if (i != dim and shape[i] != b.shape[i])
+        throw std::invalid_argument("Dimensions other than dim should be equal.");
+
+    size_t inner = 1;
+    for (size_t i = dim + 1; i < shape.size(); i++)
+      inner *= shape[i];
+    const size_t outer = num_el / inner / shape[dim];
+    const size_t a_sz = shape[dim] * inner;
+    const size_t b_sz = b.shape[dim] * inner;
+
+    auto new_shape = shape;
+    new_shape[dim] += b.shape[dim];
+    Tensor ret(std::move(new_shape));
+
+    for (size_t idx = 0; idx < outer; idx++) {
+      size_t a_off = 0, b_off = 0;
+      for (size_t i = dim, tmp = idx; i-- > 0;) {
+        const size_t c = tmp % shape[i];
+        tmp /= shape[i];
+        a_off += c * strides[i];
+        b_off += c * b.strides[i];
+      }
+
+      const size_t ret_off = idx * (a_sz + b_sz);
+      std::copy_n(data.begin() + a_off, a_sz, ret.data.begin() + ret_off);
+      std::copy_n(b.data.begin() + b_off, b_sz, ret.data.begin() + ret_off + a_sz);
+    }
+
+    return ret;
+  }
+
+  Tensor &Tensor::stack(const Tensor &b, size_t dim) {
+    *this = h_stack(b, dim);
+    return *this;
+  }
+
+  Tensor Tensor::cstack(const Tensor &b, size_t dim) const { return h_stack(b, dim); }
+
+  Tensor Tensor::h_stack(const Tensor &b, size_t dim) const {
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (dim > shape.size())
+      throw std::out_of_range("dim is out of bounds.");
+    if (shape != b.shape)
+      throw std::invalid_argument("b is not of the same shape.");
+
+    const size_t axis = dim < shape.size() ? shape[dim] : 1;
+    size_t inner = 1;
+    for (size_t i = dim + 1; i < shape.size(); i++)
+      inner *= shape[i];
+    const size_t outer = num_el / inner / axis;
+    const size_t block = axis * inner;
+
+    std::vector<size_t> new_shape;
+    new_shape.reserve(shape.size() + 1);
+    for (size_t i = 0; i < dim; i++)
+      new_shape.push_back(shape[i]);
+    new_shape.push_back(2);
+    for (size_t i = dim; i < shape.size(); i++)
+      new_shape.push_back(shape[i]);
+    Tensor ret(std::move(new_shape));
+
+    for (size_t idx = 0; idx < outer; idx++) {
+      size_t a_off = 0, b_off = 0;
+      for (size_t i = dim, tmp = idx; i-- > 0;) {
+        const size_t c = tmp % shape[i];
+        tmp /= shape[i];
+        a_off += c * strides[i];
+        b_off += c * b.strides[i];
+      }
+
+      const size_t ret_off = idx * 2 * block;
+      std::copy_n(data.begin() + a_off, block, ret.data.begin() + ret_off);
+      std::copy_n(b.data.begin() + b_off, block, ret.data.begin() + ret_off + block);
+    }
+
+    return ret;
   }
 
   bool Tensor::empty() const { return num_el == 0; }
+
+  void Tensor::validate_pair(const Tensor &a, const Tensor &b) {
+    if (not a.valid_strides() or not b.valid_strides())
+      throw std::invalid_argument("Malformed strides.");
+
+    if (a.empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+
+    if (a.data.size() != a.num_el or b.data.size() != b.num_el)
+      throw std::logic_error("Malformed num_el or data.");
+  }
 
   dtype Tensor::sum() const {
     if (empty())
@@ -166,47 +278,45 @@ namespace NN {
     return *std::ranges::max_element(data);
   }
 
-  Tensor &Tensor::sum(size_t dim) { return reduce(dim, 0.0f, std::plus<>()); }
-
-  Tensor Tensor::csum(size_t dim) const {
-    auto c = *this;
-    c.sum(dim);
-    return c;
-  }
-
-  Tensor &Tensor::mean(size_t dim) {
-    if (dim >= shape.size())
-      throw std::out_of_range("Out of bounds axis.");
-    const size_t f = shape[dim];
-    sum(dim);
-    std::ranges::for_each(data, [f](dtype &x) { x /= f; });
+  Tensor &Tensor::sum(size_t dim) {
+    *this = h_reduce(dim, 0.0f, std::plus<>());
     return *this;
   }
 
-  Tensor Tensor::cmean(size_t dim) const {
-    auto c = *this;
-    c.mean(dim);
-    return c;
+  Tensor Tensor::csum(size_t dim) const { return h_reduce(dim, 0.0f, std::plus<>()); }
+
+  Tensor &Tensor::mean(size_t dim) {
+    *this = h_mean(dim);
+    return *this;
+  }
+
+  Tensor Tensor::cmean(size_t dim) const { return h_mean(dim); }
+
+  Tensor Tensor::h_mean(size_t dim) const {
+    if (dim >= shape.size())
+      throw std::out_of_range("Out of bounds axis.");
+    const dtype f = shape[dim];
+    auto ret = h_reduce(dim, dtype{0}, std::plus<>());
+    std::ranges::for_each(ret.data, [f](dtype &x) { x /= f; });
+    return ret;
   }
 
   Tensor &Tensor::max(size_t dim) {
-    return reduce(dim, std::numeric_limits<dtype>::lowest(), [](dtype x, dtype v) { return std::max(x, v); });
+    *this = h_reduce(dim, std::numeric_limits<dtype>::lowest(), [](dtype x, dtype v) { return std::max(x, v); });
+    return *this;
   }
 
   Tensor Tensor::cmax(size_t dim) const {
-    auto c = *this;
-    c.max(dim);
-    return c;
+    return h_reduce(dim, std::numeric_limits<dtype>::lowest(), [](dtype x, dtype v) { return std::max(x, v); });
   }
 
   Tensor &Tensor::min(size_t dim) {
-    return reduce(dim, std::numeric_limits<dtype>::max(), [](dtype x, dtype v) { return std::min(x, v); });
+    *this = h_reduce(dim, std::numeric_limits<dtype>::max(), [](dtype x, dtype v) { return std::min(x, v); });
+    return *this;
   }
 
   Tensor Tensor::cmin(size_t dim) const {
-    auto c = *this;
-    c.min(dim);
-    return c;
+    return h_reduce(dim, std::numeric_limits<dtype>::max(), [](dtype x, dtype v) { return std::min(x, v); });
   }
 
   Tensor &Tensor::add(const dtype x) {
@@ -217,17 +327,13 @@ namespace NN {
   }
 
   Tensor &Tensor::add(const Tensor &b) {
-    valid_pair(b);
-    if (broadcast_shape(shape, b.shape) != shape)
+    validate_pair(*this, b);
+    if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::plus<>());
   }
 
-  Tensor Tensor::add(const Tensor &a, const Tensor &b) {
-    auto c = a;
-    c.add(b);
-    return c;
-  }
+  Tensor Tensor::add(const Tensor &a, const Tensor &b) { return a.cadd(b); }
 
   Tensor Tensor::cadd(const dtype x) const {
     auto c = *this;
@@ -236,7 +342,7 @@ namespace NN {
   }
 
   Tensor Tensor::cadd(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::plus<>());
   }
 
@@ -248,17 +354,13 @@ namespace NN {
   }
 
   Tensor &Tensor::sub(const Tensor &b) {
-    valid_pair(b);
-    if (broadcast_shape(shape, b.shape) != shape)
+    validate_pair(*this, b);
+    if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::minus<>());
   }
 
-  Tensor Tensor::sub(const Tensor &a, const Tensor &b) {
-    auto c = a;
-    c.sub(b);
-    return c;
-  }
+  Tensor Tensor::sub(const Tensor &a, const Tensor &b) { return a.csub(b); }
 
   Tensor Tensor::csub(const dtype x) const {
     auto c = *this;
@@ -267,13 +369,13 @@ namespace NN {
   }
 
   Tensor Tensor::csub(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::minus<>());
   }
 
   Tensor &Tensor::mul(const Tensor &b) {
-    valid_pair(b);
-    if (broadcast_shape(shape, b.shape) != shape)
+    validate_pair(*this, b);
+    if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::multiplies<>());
   }
@@ -285,11 +387,7 @@ namespace NN {
     return *this;
   }
 
-  Tensor Tensor::mul(const Tensor &a, const Tensor &b) {
-    auto c = a;
-    c.mul(b);
-    return c;
-  }
+  Tensor Tensor::mul(const Tensor &a, const Tensor &b) { return a.cmul(b); }
 
   Tensor Tensor::cmul(const dtype x) const {
     auto c = *this;
@@ -298,39 +396,94 @@ namespace NN {
   }
 
   Tensor Tensor::cmul(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::multiplies<>());
   }
 
   Tensor &Tensor::matmul(const Tensor &b) {
-    if (shape.size() != 2 or b.shape.size() != 2)
-      throw std::invalid_argument("Tensor should be rank 2 for matmul");
-    if (shape[1] != b.shape[0])
-      throw std::invalid_argument("Incompatible tensors for matmul.");
-
-    Tensor ret(shape[0], b.shape[1]);
-    for (size_t i = 0; i < shape[0]; i++) {
-      for (size_t j = 0; j < b.shape[1]; j++) {
-        dtype sum = 0;
-        for (size_t k = 0; k < shape[1]; k++)
-          sum += at(i, k) * b.at(k, j);
-        ret.at(i, j) = sum;
-      }
-    }
-    *this = std::move(ret);
+    *this = h_matmul(b);
     return *this;
   }
 
-  Tensor Tensor::cmatmul(const Tensor &b) const {
-    auto c = *this;
-    c.matmul(b);
-    return c;
-  }
+  Tensor Tensor::cmatmul(const Tensor &b) const { return h_matmul(b); }
 
-  Tensor Tensor::matmul(const Tensor &a, const Tensor &b) {
-    auto c = a;
-    c.matmul(b);
-    return c;
+  Tensor Tensor::matmul(const Tensor &a, const Tensor &b) { return a.h_matmul(b); }
+
+  Tensor Tensor::h_matmul(const Tensor &b) const {
+    validate_pair(*this, b);
+    if (shape.size() < 2 or b.shape.size() < 2)
+      throw std::domain_error("Cant matmul with a scalar.");
+
+    const size_t arank = shape.size(), brank = b.shape.size();
+    const size_t m = shape[arank - 2];
+    const size_t k = shape[arank - 1];
+    const size_t n = b.shape[brank - 1];
+
+    // A: [..., m, k]
+    // B: [..., k, n]
+    if (k != b.shape[brank - 2])
+      throw std::invalid_argument("Incompatible tensors for matmul.");
+
+    auto a_shape = std::span(shape).first(shape.size() - 2);
+    auto b_shape = std::span(b.shape).first(b.shape.size() - 2);
+    auto batch = broadcast_shape(a_shape, b_shape);
+
+    const size_t br = batch.size();
+    const size_t a_pad = br - a_shape.size(), b_pad = br - b_shape.size();
+
+    std::vector<size_t> a_scratch, b_scratch;
+    auto a_bs = std::span<const size_t>(strides).first(br);
+    auto b_bs = std::span<const size_t>(b.strides).first(br);
+    if (not std::ranges::equal(a_shape, batch)) {
+      a_scratch.assign(br, 0);
+      for (size_t i = 0; i < a_shape.size(); i++)
+        if (a_shape[i] != 1)
+          a_scratch[a_pad + i] = strides[i];
+      a_bs = a_scratch;
+    }
+    if (not std::ranges::equal(b_shape, batch)) {
+      b_scratch.assign(br, 0);
+      for (size_t i = 0; i < b_shape.size(); i++)
+        if (b_shape[i] != 1)
+          b_scratch[b_pad + i] = b.strides[i];
+      b_bs = b_scratch;
+    }
+
+    size_t cnt = 1;
+    for (const size_t d : batch)
+      cnt *= d;
+
+    batch.reserve(br + 2);
+    batch.push_back(m);
+    batch.push_back(n);
+
+    std::vector<dtype> out(cnt * m * n);
+
+    size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
+    size_t b1 = b.strides[brank - 1], b2 = b.strides[brank - 2];
+
+    for (size_t idx = 0; idx < cnt; idx++) {
+      size_t a_off = 0, b_off = 0, tmp = idx;
+      for (size_t d = br; d-- > 0;) {
+        const size_t c = tmp % batch[d];
+        tmp /= batch[d];
+        a_off += c * a_bs[d];
+        b_off += c * b_bs[d];
+      }
+      for (size_t i = 0; i < m; i++) {
+        for (size_t j = 0; j < n; j++) {
+          dtype sum = 0;
+          for (size_t t = 0; t < k; t++)
+            sum += data[a_off + i * a2 + t * a1] * b.data[b_off + t * b2 + j * b1];
+          out[idx * m * n + i * n + j] = sum;
+        }
+      }
+    }
+
+    Tensor ret;
+    ret.set_dims(std::move(batch));
+    ret.set_data(std::move(out));
+    return ret;
   }
 
   Tensor Tensor::operator-() const {

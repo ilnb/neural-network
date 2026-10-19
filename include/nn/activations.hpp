@@ -1,0 +1,13 @@
+#pragma once
+
+#include "tensor/tensor.hpp"
+
+namespace NN::Act {
+  Tensor relu(const Tensor &x);
+
+  dtype sigmoid(dtype v);
+
+  Tensor sigmoid(const Tensor &x);
+
+  Tensor softmax(const Tensor &x, size_t dim);
+} // namespace NN::Act
