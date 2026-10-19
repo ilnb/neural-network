@@ -295,6 +295,10 @@ namespace NN {
     // True if the tensor holds no elements.
     bool empty() const;
 
+    // Throws unless both tensors have valid strides and consistent storage,
+    // and neither is empty. Does not compare shapes.
+    static void validate_pair(const Tensor &a, const Tensor &b);
+
     // Sum of all elements. Returns 0 for an empty tensor.
     dtype sum() const;
 
@@ -642,10 +646,6 @@ namespace NN {
 
     // True if `b` broadcasts into `s` without changing its shape.
     static bool broadcasts_into(const std::vector<size_t> &s, const std::vector<size_t> &b);
-
-    // Throws unless both tensors have valid strides and consistent storage,
-    // and neither is empty. Does not compare shapes.
-    void valid_pair(const Tensor &b) const;
 
     // True if `strides` are the contiguous row-major strides of `shape`.
     bool valid_strides() const;

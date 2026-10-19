@@ -1,20 +1,12 @@
 #include "nn/activations.hpp"
+#include "nn/detail.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
 namespace NN::Act {
-  namespace {
-    template <typename F>
-    Tensor map(const Tensor &x, F f) {
-      Tensor r = x;
-      std::ranges::for_each(r.data, [f](dtype &v) { v = f(v); });
-      return r;
-    }
-  } // namespace
-
   Tensor relu(const Tensor &x) {
-    return map(x, [](dtype v) { return v > 0 ? v : 0; });
+    return Detail::map(x, [](dtype v) { return v > 0 ? v : 0; });
   }
 
   dtype sigmoid(dtype v) {
@@ -25,7 +17,7 @@ namespace NN::Act {
   }
 
   Tensor sigmoid(const Tensor &x) {
-    return map(x, [](dtype v) { return sigmoid(v); });
+    return Detail::map(x, [](dtype v) { return sigmoid(v); });
   }
 
   Tensor softmax(const Tensor &x, size_t dim) {

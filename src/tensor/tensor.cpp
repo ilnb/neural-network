@@ -50,17 +50,6 @@ namespace NN {
     return true;
   }
 
-  void Tensor::valid_pair(const Tensor &b) const {
-    if (not valid_strides() or not b.valid_strides())
-      throw std::invalid_argument("Malformed strides.");
-
-    if (empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
-
-    if (data.size() != num_el or b.data.size() != b.num_el)
-      throw std::logic_error("Malformed num_el or data.");
-  }
-
   std::vector<size_t> Tensor::compute_strides(const std::vector<size_t> &shape) {
     std::vector<size_t> strides(shape.size());
     size_t acc = 1;
@@ -254,6 +243,17 @@ namespace NN {
 
   bool Tensor::empty() const { return num_el == 0; }
 
+  void Tensor::validate_pair(const Tensor &a, const Tensor &b) {
+    if (not a.valid_strides() or not b.valid_strides())
+      throw std::invalid_argument("Malformed strides.");
+
+    if (a.empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+
+    if (a.data.size() != a.num_el or b.data.size() != b.num_el)
+      throw std::logic_error("Malformed num_el or data.");
+  }
+
   dtype Tensor::sum() const {
     if (empty())
       return 0;
@@ -327,7 +327,7 @@ namespace NN {
   }
 
   Tensor &Tensor::add(const Tensor &b) {
-    valid_pair(b);
+    validate_pair(*this, b);
     if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::plus<>());
@@ -342,7 +342,7 @@ namespace NN {
   }
 
   Tensor Tensor::cadd(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::plus<>());
   }
 
@@ -354,7 +354,7 @@ namespace NN {
   }
 
   Tensor &Tensor::sub(const Tensor &b) {
-    valid_pair(b);
+    validate_pair(*this, b);
     if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::minus<>());
@@ -369,12 +369,12 @@ namespace NN {
   }
 
   Tensor Tensor::csub(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::minus<>());
   }
 
   Tensor &Tensor::mul(const Tensor &b) {
-    valid_pair(b);
+    validate_pair(*this, b);
     if (not broadcasts_into(shape, b.shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::multiplies<>());
@@ -396,7 +396,7 @@ namespace NN {
   }
 
   Tensor Tensor::cmul(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     return binary_broadcast(*this, b, std::multiplies<>());
   }
 
@@ -410,7 +410,7 @@ namespace NN {
   Tensor Tensor::matmul(const Tensor &a, const Tensor &b) { return a.h_matmul(b); }
 
   Tensor Tensor::h_matmul(const Tensor &b) const {
-    valid_pair(b);
+    validate_pair(*this, b);
     if (shape.size() < 2 or b.shape.size() < 2)
       throw std::domain_error("Cant matmul with a scalar.");
 
