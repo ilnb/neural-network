@@ -174,6 +174,53 @@ namespace NN {
     return c;
   }
 
+  Tensor &Tensor::stack(const Tensor &b, size_t dim) {
+    if (dim > shape.size())
+      throw std::out_of_range("dim is out of bounds.");
+    if (shape != b.shape)
+      throw std::invalid_argument("b is not of the same shape.");
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
+
+    const size_t axis = dim < shape.size() ? shape[dim] : 1;
+    size_t inner = 1;
+    for (size_t i = dim + 1; i < shape.size(); i++)
+      inner *= shape[i];
+    const size_t outer = num_el / inner / axis;
+    const size_t block = axis * inner;
+
+    std::vector<size_t> new_shape;
+    for (size_t i = 0; i < dim; i++)
+      new_shape.push_back(shape[i]);
+    new_shape.push_back(2);
+    for (size_t i = dim; i < shape.size(); i++)
+      new_shape.push_back(shape[i]);
+    Tensor ret(std::move(new_shape));
+
+    for (size_t idx = 0; idx < outer; idx++) {
+      size_t a_off = 0, b_off = 0;
+      for (size_t i = dim, tmp = idx; i-- > 0;) {
+        const size_t c = tmp % shape[i];
+        a_off += c * strides[i];
+        b_off += c * b.strides[i];
+        tmp /= shape[i];
+      }
+
+      const size_t ret_off = idx * 2 * block;
+      std::copy_n(data.begin() + a_off, block, ret.data.begin() + ret_off);
+      std::copy_n(b.data.begin() + b_off, block, ret.data.begin() + ret_off + block);
+    }
+
+    *this = std::move(ret);
+    return *this;
+  }
+
+  Tensor Tensor::cstack(const Tensor &b, size_t dim) const {
+    auto c = *this;
+    c.stack(b, dim);
+    return c;
+  }
+
   bool Tensor::empty() const { return num_el == 0; }
 
   dtype Tensor::sum() const {

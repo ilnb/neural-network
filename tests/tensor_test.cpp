@@ -165,5 +165,50 @@ int main() {
     }
     println();
   }
+
+  {
+    println("STACK");
+    Tensor a(2, 3), b(2, 3);
+    a.set_data(1, 2, 3, 4, 5, 6);
+    b.set_data(7, 8, 9, 10, 11, 12);
+
+    println("a shape: {}\na  data: {}\n", a.shape, a.data);
+    println("b shape: {}\nb  data: {}\n", b.shape, b.data);
+
+    auto t = a.cstack(b, 0);
+    println("a.stack(b, 0):");
+    println("shape: {}", t.shape);
+    println("data : {}\n", t.data);
+
+    t = a.cstack(b, 1);
+    println("a.stack(b, 1):");
+    println("shape: {}", t.shape);
+    println("data : {}\n", t.data);
+
+    t = a.cstack(b, a.shape.size());
+    println("a.stack(b, rank):");
+    println("shape: {}", t.shape);
+    println("data : {}\n", t.data);
+
+    Tensor c(2, 2, 3);
+    c.set_data(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    auto u = c.cstack(c, 2);
+    println("c.stack(c, 2):");
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    Tensor d(3, 2);
+    try {
+      a.cstack(d, 0);
+    } catch (const std::invalid_argument &ex) {
+      println("stack mismatch: {}", ex.what());
+    }
+    try {
+      a.cstack(b, 9);
+    } catch (const std::out_of_range &ex) {
+      println("stack dim oob: {}", ex.what());
+    }
+    println();
+  }
   return 0;
 }

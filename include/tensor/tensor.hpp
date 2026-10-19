@@ -231,6 +231,19 @@ namespace NN {
     // Copycat.
     Tensor ccat(const Tensor &b, size_t dim) const;
 
+    // Stacks `b` onto this tensor along a new dimension `dim`. The result has
+    // rank + 1, with a size-2 axis inserted at `dim`; this tensor and `b` are
+    // its two slices. The two tensors must have identical shapes.
+    //
+    // `dim` may equal the rank, which appends the new axis at the end.
+    //
+    // Throws `std::out_of_range` if `dim > rank`, and `std::invalid_argument`
+    // if the shapes differ or either tensor is empty.
+    Tensor &stack(const Tensor &b, size_t dim);
+
+    // Copy-stack.
+    Tensor cstack(const Tensor &b, size_t dim) const;
+
     // True if the tensor holds no elements.
     bool empty() const;
 
