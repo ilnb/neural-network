@@ -47,8 +47,8 @@ int main() {
     Tensor x(2, 3, 4);
     try {
       x.transpose();
-    } catch (const std::invalid_argument &e) {
-      println("transpose rank test - shape: {} : {}", x.shape, e.what());
+    } catch (const std::invalid_argument &ex) {
+      println("transpose rank test - shape: {} : {}", x.shape, ex.what());
     }
     println();
 
@@ -207,6 +207,54 @@ int main() {
       a.cstack(b, 9);
     } catch (const std::out_of_range &ex) {
       println("stack dim oob: {}", ex.what());
+    }
+    println();
+  }
+
+  {
+    println("PERMUTE");
+    Tensor t(2, 3, 2);
+    t.set_data(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+
+    println("t shape: {}\nt  data: {}\n", t.shape, t.data);
+
+    auto u = t.cpermute(2, 0, 1);
+    println("t.permute(2, 0, 1):");
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    u = t.cpermute({1, 0, 2});
+    println("t.permute({{1, 0, 2}}):");
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    std::vector<size_t> p = {0, 2, 1};
+    u = t.cpermute(p);
+    println("t.permute(p), p = {}:", p);
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    u = t.cpermute(0, 1, 2);
+    println("t.permute(0, 1, 2):");
+    println("shape: {}", u.shape);
+    println("data : {}\n", u.data);
+
+    Tensor m(2, 2);
+    m.set_data(1, 2, 3, 4);
+    m.permute(1, 0);
+    println("in-place m.permute(1, 0):");
+    println("shape: {}", m.shape);
+    println("data : {}\n", m.data);
+
+    try {
+      t.permute(0, 0, 1);
+    } catch (const std::invalid_argument &ex) {
+      println("permute invalid: {}", ex.what());
+    }
+    try {
+      t.permute(0, 1);
+    } catch (const std::invalid_argument &ex) {
+      println("permute size: {}", ex.what());
     }
     println();
   }

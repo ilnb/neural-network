@@ -111,14 +111,23 @@ namespace NN {
       throw std::invalid_argument("Empty tensor.");
     if (data.size() != num_el)
       throw std::invalid_argument("Malformed tensor data.");
+
     const size_t r = shape[0], c = shape[1];
-    std::vector<dtype> out(num_el);
-    for (size_t i = 0; i < r; i++)
-      for (size_t j = 0; j < c; j++)
-        out[j * r + i] = data[i * c + j];
-    data = std::move(out);
-    std::ranges::reverse(shape);
-    strides = compute_strides(shape);
+    std::vector<bool> seen(num_el, false);
+    for (size_t s = 0; s < num_el; s++) {
+      if (seen[s])
+        continue;
+      size_t cur = s;
+      dtype hold = data[s];
+      do {
+        seen[cur] = true;
+        const size_t next = (cur % c) * r + cur / c;
+        std::swap(hold, data[next]);
+        cur = next;
+      } while (cur != s);
+    }
+    std::swap(shape[0], shape[1]);
+    strides[0] = r, strides[1] = 1;
     return *this;
   }
 
@@ -129,6 +138,8 @@ namespace NN {
   }
 
   Tensor &Tensor::cat(const Tensor &b, size_t dim) {
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
     if (dim >= shape.size())
       throw std::out_of_range("dim is out of bounds.");
     if (shape.size() != b.shape.size())
@@ -136,8 +147,6 @@ namespace NN {
     for (size_t i = 0; i < shape.size(); i++)
       if (i != dim and shape[i] != b.shape[i])
         throw std::invalid_argument("Dimensions other than dim should be equal.");
-    if (empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
 
     size_t inner = 1;
     for (size_t i = dim + 1; i < shape.size(); i++)
@@ -175,12 +184,12 @@ namespace NN {
   }
 
   Tensor &Tensor::stack(const Tensor &b, size_t dim) {
+    if (empty() or b.empty())
+      throw std::invalid_argument("Empty tensor.");
     if (dim > shape.size())
       throw std::out_of_range("dim is out of bounds.");
     if (shape != b.shape)
       throw std::invalid_argument("b is not of the same shape.");
-    if (empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
 
     const size_t axis = dim < shape.size() ? shape[dim] : 1;
     size_t inner = 1;

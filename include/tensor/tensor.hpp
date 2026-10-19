@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <initializer_list>
@@ -244,6 +245,52 @@ namespace NN {
     // Copy-stack.
     Tensor cstack(const Tensor &b, size_t dim) const;
 
+    // Permutes tensor dimensions according to provided permutation.
+    //
+    // Throws `std::invalid_argument` if `perm` is not a permutation, or if
+    // the size doesn't match.
+    template <typename R>
+      requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
+    Tensor &permute(R &&perm) {
+      *this = permuted(std::forward<R>(perm));
+      return *this;
+    }
+
+    // Permutes from an initializer list.
+    template <typename T>
+      requires std::integral<T>
+    Tensor &permute(std::initializer_list<T> l) {
+      return permute<std::initializer_list<T> &>(l);
+    }
+
+    // Convenience form of `permute`.
+    template <typename... Args>
+      requires(std::integral<Args> and ...)
+    Tensor &permute(Args... args) {
+      return permute(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(args)...});
+    }
+
+    // Copy-permute.
+    template <typename R>
+      requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
+    Tensor cpermute(R &&perm) const {
+      return permuted(std::forward<R>(perm));
+    }
+
+    // Copy-permute from an initializer list.
+    template <typename T>
+      requires std::integral<T>
+    Tensor cpermute(std::initializer_list<T> l) const {
+      return cpermute<std::initializer_list<T> &>(l);
+    }
+
+    // Convenience form of `cpermute`.
+    template <typename... Args>
+      requires(std::integral<Args> and ...)
+    Tensor cpermute(Args... args) const {
+      return cpermute(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(args)...});
+    }
+
     // True if the tensor holds no elements.
     bool empty() const;
 
@@ -486,6 +533,37 @@ namespace NN {
 
       *this = std::move(ret);
       return *this;
+    }
+
+    // Helper to skip unnecessary allocations
+    template <typename R>
+      requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
+    Tensor permuted(R &&perm) const {
+      if (empty())
+        throw std::invalid_argument("Empty tensor.");
+      const size_t n = shape.size();
+      if (std::ranges::size(perm) != n)
+        throw std::invalid_argument("`perm` needs to be of the same size.");
+      if (!std::ranges::is_permutation(perm, std::views::iota(0uz, n)))
+        throw std::invalid_argument("`perm` is not a permutation.");
+
+      std::vector<size_t> new_shape(n);
+      auto it = std::ranges::begin(perm);
+      for (size_t i = 0; i < n; i++)
+        new_shape[i] = shape[it[i]];
+
+      Tensor ret(std::move(new_shape));
+      for (size_t idx = 0; idx < ret.num_el; idx++) {
+        size_t off = 0;
+        for (size_t i = n, tmp = idx; i-- > 0;) {
+          const size_t c = tmp % ret.shape[i];
+          tmp /= ret.shape[i];
+          off += c * strides[it[i]];
+        }
+        ret.data[idx] = data[off];
+      }
+
+      return ret;
     }
 
     // Applies `op(data[i], b[offset])` in-place, with `b` broadcast into `*this`.
