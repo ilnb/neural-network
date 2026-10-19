@@ -1,0 +1,66 @@
+#include "nn/activations.hpp"
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
+namespace NN::Act {
+  namespace {
+    template <typename F>
+    Tensor map(const Tensor &x, F f) {
+      Tensor r = x;
+      std::ranges::for_each(r.data, [f](dtype &v) { v = f(v); });
+      return r;
+    }
+  } // namespace
+
+  Tensor relu(const Tensor &x) {
+    return map(x, [](dtype v) { return v > 0 ? v : 0; });
+  }
+
+  dtype sigmoid(dtype v) {
+    if (v >= 0)
+      return 1 / (1 + std::exp(-v));
+    else
+      return std::exp(v) / (1 + std::exp(v));
+  }
+
+  Tensor sigmoid(const Tensor &x) {
+    return map(x, [](dtype v) { return sigmoid(v); });
+  }
+
+  Tensor softmax(const Tensor &x, size_t dim) {
+    if (x.empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (dim >= x.shape.size())
+      throw std::out_of_range("dim is out of bounds.");
+
+    Tensor r = x;
+    const auto &sh = r.shape, &st = r.strides;
+    auto &dt = r.data;
+    const size_t n = sh.size(), d = sh[dim], sd = st[dim];
+    const size_t outer = r.num_el / d;
+
+    for (size_t idx = 0; idx < outer; idx++) {
+      size_t off = 0;
+      for (size_t i = n, tmp = idx; i-- > 0;) {
+        const size_t sz = i == dim ? 1 : sh[i];
+        const size_t c = tmp % sz;
+        tmp /= sz;
+        off += c * st[i];
+      }
+
+      dtype mx = dt[off];
+      for (size_t k = 1; k < d; k++)
+        mx = std::max(mx, dt[off + k * sd]);
+      dtype s = 0;
+      for (size_t k = 0; k < d; k++) {
+        const dtype v = std::exp(dt[off + k * sd] - mx);
+        dt[off + k * sd] = v;
+        s += v;
+      }
+      for (size_t k = 0; k < d; k++)
+        dt[off + k * sd] /= s;
+    }
+    return r;
+  }
+} // namespace NN::Act
