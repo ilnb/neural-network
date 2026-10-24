@@ -4,7 +4,6 @@
 #include <stdexcept>
 
 namespace NN::Loss {
-  // Mean Squared Error
   dtype mse(const Tensor &pred, const Tensor &target) {
     Tensor::validate_pair(pred, target);
     if (pred.shape != target.shape)
@@ -18,7 +17,6 @@ namespace NN::Loss {
     return static_cast<dtype>(sum / static_cast<double>(pred.num_el));
   }
 
-  // Binary Cross Entropy loss
   dtype bce(const Tensor &pred, const Tensor &target) {
     Tensor::validate_pair(pred, target);
     if (pred.shape != target.shape)
@@ -46,7 +44,6 @@ namespace NN::Loss {
     return static_cast<dtype>(sum / static_cast<double>(pred.num_el));
   }
 
-  // Cross Entropy loss
   dtype ce(const Tensor &pred, const Tensor &target, size_t dim) {
     Tensor::validate_pair(pred, target);
     if (pred.shape != target.shape)

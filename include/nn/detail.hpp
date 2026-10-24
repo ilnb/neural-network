@@ -3,6 +3,7 @@
 #include "tensor/tensor.hpp"
 
 namespace NN::Detail {
+  // Applies `f` to every element of `x` and returns a copy.
   template <typename F>
   Tensor map(const Tensor &x, F f) {
     Tensor r = x;
