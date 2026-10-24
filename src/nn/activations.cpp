@@ -23,16 +23,16 @@ namespace NN::Act {
   Tensor softmax(const Tensor &x, size_t dim) {
     if (x.empty())
       throw std::invalid_argument("Empty tensor.");
-    if (dim >= x.shape.size())
+    if (dim >= x.p->shape.size())
       throw std::out_of_range("dim is out of bounds.");
 
     Tensor r;
-    const auto &sh = r.shape, &st = r.strides;
-    auto &dt = r.data;
-    const auto &xdt = x.data;
-    r.set_dims(x.shape, false);
+    const auto &sh = r.p->shape, &st = r.p->strides;
+    auto &dt = r.p->data;
+    const auto &xdt = x.p->data;
+    r.set_dims(x.p->shape, false);
     const size_t n = sh.size(), d = sh[dim], sd = st[dim];
-    const size_t outer = r.num_el / d;
+    const size_t outer = r.p->num_el / d;
 
     for (size_t idx = 0; idx < outer; idx++) {
       size_t off = 0;
@@ -61,16 +61,16 @@ namespace NN::Act {
   Tensor log_softmax(const Tensor &x, size_t dim) {
     if (x.empty())
       throw std::invalid_argument("Empty tensor.");
-    if (dim >= x.shape.size())
+    if (dim >= x.p->shape.size())
       throw std::out_of_range("dim out of bounds.");
 
     Tensor r;
-    const auto &sh = r.shape, &st = r.strides;
-    auto &dt = r.data;
-    const auto &xdt = x.data;
-    r.set_dims(x.shape, false);
+    const auto &sh = r.p->shape, &st = r.p->strides;
+    auto &dt = r.p->data;
+    const auto &xdt = x.p->data;
+    r.set_dims(x.p->shape, false);
     const size_t n = sh.size(), d = sh[dim], sd = st[dim];
-    const size_t outer = r.num_el / d;
+    const size_t outer = r.p->num_el / d;
 
     for (size_t idx = 0; idx < outer; idx++) {
       size_t off = 0;

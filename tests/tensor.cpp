@@ -25,30 +25,30 @@ static void check_close(dtype got, dtype want, dtype tol, const char *what) {
 
 static void check_shape(const Tensor &t, std::initializer_list<size_t> want, const char *what) {
   const std::vector<size_t> w(want);
-  if (t.shape != w) {
-    std::println(stderr, "FAIL: {} (shape is {}, want {})", what, t.shape, w);
+  if (t.p->shape != w) {
+    std::println(stderr, "FAIL: {} (shape is {}, want {})", what, t.p->shape, w);
     failures++;
   }
 }
 
 static void check_strides(const Tensor &t, std::initializer_list<size_t> want, const char *what) {
   const std::vector<size_t> w(want);
-  if (t.strides != w) {
-    std::println(stderr, "FAIL: {} (strides are {}, want {})", what, t.strides, w);
+  if (t.p->strides != w) {
+    std::println(stderr, "FAIL: {} (strides are {}, want {})", what, t.p->strides, w);
     failures++;
   }
 }
 
 static void check_data(const Tensor &t, std::initializer_list<dtype> want, const char *what, dtype tol = 0) {
   const std::vector<dtype> w(want);
-  if (t.data.size() != w.size()) {
-    std::println(stderr, "FAIL: {} (data size is {}, want {})", what, t.data.size(), w.size());
+  if (t.p->data.size() != w.size()) {
+    std::println(stderr, "FAIL: {} (data size is {}, want {})", what, t.p->data.size(), w.size());
     failures++;
     return;
   }
   for (size_t i = 0; i < w.size(); i++) {
-    if (std::abs(t.data[i] - w[i]) > tol) {
-      std::println(stderr, "FAIL: {} (data[{}] is {}, want {})", what, i, t.data[i], w[i]);
+    if (std::abs(t.p->data[i] - w[i]) > tol) {
+      std::println(stderr, "FAIL: {} (data[{}] is {}, want {})", what, i, t.p->data[i], w[i]);
       failures++;
       return;
     }
@@ -80,23 +80,23 @@ static void test_indexing() {
   check_shape(a, {2, 3}, "ctor: shape");
   check_strides(a, {3, 1}, "ctor: strides");
   check_data(a, {0, 0, 0, 0, 0, 0}, "ctor: data is zero-initialized");
-  check(a.num_el == 6, "ctor: num_el");
+  check(a.p->num_el == 6, "ctor: num_el");
 
   std::vector<size_t> dims = {2, 3};
   a.set_dims(dims);
   check(a.empty(), "set_dims: tensor is empty");
-  check(a.data.empty(), "set_dims: data is empty");
-  check(a.num_el == 0, "set_dims: num_el");
+  check(a.p->data.empty(), "set_dims: data is empty");
+  check(a.p->num_el == 0, "set_dims: num_el");
   check_shape(a, {2, 3}, "set_dims: shape is kept");
   check_strides(a, {3, 1}, "set_dims: strides");
 
   a.set_data({3, 2, 10, 4, 5, 6});
   check(not a.empty(), "set_data: tensor is not empty");
-  check(a.num_el == 6, "set_data: num_el");
+  check(a.p->num_el == 6, "set_data: num_el");
   check_data(a, {3, 2, 10, 4, 5, 6}, "set_data: data");
 
   Tensor b = a;
-  std::ranges::for_each(b.data, [](dtype &x) { x++; });
+  std::ranges::for_each(b.p->data, [](dtype &x) { x++; });
 
   const auto c = a + b;
   check_shape(c, {2, 3}, "a+b: shape");
@@ -104,7 +104,7 @@ static void test_indexing() {
 
   const auto d = Tensor::mul(c, a);
   check_data(d, {21, 10, 210, 36, 55, 78}, "Tensor::mul(c,a): data");
-  check_data(a.cadd(b).mul(a), {21, 10, 210, 36, 55, 78}, "cadd/mul chain: data");
+  check_data(a.add(b).mul(a), {21, 10, 210, 36, 55, 78}, "cadd/mul chain: data");
 
   check(a.at(1, 2) == 6, "at: read");
   a.at(1, 2) = 7;
@@ -132,7 +132,7 @@ static void test_transpose() {
   check_strides(r, {3, 1}, "double transpose: strides");
   check_data(r, {1, 2, 3, 4, 5, 6}, "double transpose: data");
 
-  const auto c = mk({2, 3}, {1, 2, 3, 4, 5, 6}).ctranspose();
+  const auto c = mk({2, 3}, {1, 2, 3, 4, 5, 6}).transpose();
   check_shape(c, {3, 2}, "ctranspose: shape");
   check_strides(c, {2, 1}, "ctranspose: strides");
   check_data(c, {1, 4, 2, 5, 3, 6}, "ctranspose: data");
@@ -146,33 +146,33 @@ static void test_reduce() {
   check_close(t.min(), 1, 0, "min: total");
   check_close(t.max(), 14, 0, "max: total");
 
-  check_shape(t.csum(0), {3, 2}, "csum(0): shape");
-  check_data(t.csum(0), {12, 10, 15, 13, 20, 19}, "csum(0): data");
-  check_shape(t.csum(1), {2, 2}, "csum(1): shape");
-  check_data(t.csum(1), {14, 15, 33, 27}, "csum(1): data");
-  check_shape(t.csum(2), {2, 3}, "csum(2): shape");
-  check_data(t.csum(2), {5, 6, 18, 17, 22, 21}, "csum(2): data");
+  check_shape(t.sum(0), {3, 2}, "csum(0): shape");
+  check_data(t.sum(0), {12, 10, 15, 13, 20, 19}, "csum(0): data");
+  check_shape(t.sum(1), {2, 2}, "csum(1): shape");
+  check_data(t.sum(1), {14, 15, 33, 27}, "csum(1): data");
+  check_shape(t.sum(2), {2, 3}, "csum(2): shape");
+  check_data(t.sum(2), {5, 6, 18, 17, 22, 21}, "csum(2): data");
 
-  check_data(t.cmean(0), {6, 5, 7.5f, 6.5f, 10, 9.5f}, "cmean(0): data", 1e-6f);
-  check_data(t.cmean(1), {14.0f / 3, 5, 11, 9}, "cmean(1): data", 1e-6f);
-  check_data(t.cmean(2), {2.5f, 3, 9, 8.5f, 11, 10.5f}, "cmean(2): data", 1e-6f);
+  check_data(t.mean(0), {6, 5, 7.5f, 6.5f, 10, 9.5f}, "cmean(0): data", 1e-6f);
+  check_data(t.mean(1), {14.0f / 3, 5, 11, 9}, "cmean(1): data", 1e-6f);
+  check_data(t.mean(2), {2.5f, 3, 9, 8.5f, 11, 10.5f}, "cmean(2): data", 1e-6f);
 
-  check_data(t.cmax(0), {9, 8, 10, 12, 14, 12}, "cmax(0): data");
-  check_data(t.cmax(1), {6, 12, 14, 12}, "cmax(1): data");
-  check_data(t.cmax(2), {3, 5, 12, 9, 12, 14}, "cmax(2): data");
+  check_data(t.max(0), {9, 8, 10, 12, 14, 12}, "cmax(0): data");
+  check_data(t.max(1), {6, 12, 14, 12}, "cmax(1): data");
+  check_data(t.max(2), {3, 5, 12, 9, 12, 14}, "cmax(2): data");
 
-  check_data(t.cmin(0), {3, 2, 5, 1, 6, 7}, "cmin(0): data");
-  check_data(t.cmin(1), {3, 1, 9, 7}, "cmin(1): data");
-  check_data(t.cmin(2), {2, 1, 6, 8, 10, 7}, "cmin(2): data");
+  check_data(t.min(0), {3, 2, 5, 1, 6, 7}, "cmin(0): data");
+  check_data(t.min(1), {3, 1, 9, 7}, "cmin(1): data");
+  check_data(t.min(2), {2, 1, 6, 8, 10, 7}, "cmin(2): data");
 
   Tensor u = t;
   u.sum(1);
   check_shape(u, {2, 2}, "sum(1): shape");
   check_data(u, {14, 15, 33, 27}, "sum(1): data");
 
-  check_throws<std::out_of_range>([&] { (void)t.csum(3); }, "csum: dim out of range");
-  check_throws<std::domain_error>([&] { (void)Tensor(3).csum(0); }, "csum: scalar tensor");
-  check_throws<std::domain_error>([&] { (void)Tensor().csum(0); }, "csum: empty tensor");
+  check_throws<std::out_of_range>([&] { (void)t.sum(3); }, "csum: dim out of range");
+  check_throws<std::domain_error>([&] { (void)Tensor(3).sum(0); }, "csum: scalar tensor");
+  check_throws<std::domain_error>([&] { (void)Tensor().sum(0); }, "csum: empty tensor");
 }
 
 static void test_broadcasting() {
@@ -191,7 +191,7 @@ static void test_broadcasting() {
   check_shape(mul, {2, 2, 2}, "u*v: shape");
   check_data(mul, {8, 12, 20, 30, 2, 18, 5, 45}, "u*v: data");
 
-  const auto cadd = u.cadd(v);
+  const auto cadd = u.add(v);
   check_shape(cadd, {2, 2, 2}, "cadd: shape");
   check_data(cadd, {6, 8, 9, 11, 3, 11, 6, 14}, "cadd: data");
 
@@ -220,7 +220,7 @@ static void test_matmul() {
   check_shape(c, {2, 2, 1, 1}, "matmul: shape");
   check_data(c, {22, 38, 10, 10}, "matmul: data");
 
-  const auto d = u.cmatmul(v);
+  const auto d = u.matmul(v);
   check_shape(d, {2, 2, 1, 1}, "cmatmul: shape");
   check_data(d, {22, 38, 10, 10}, "cmatmul: data");
 
@@ -228,75 +228,74 @@ static void test_matmul() {
   w.matmul(mk({2, 2}, {1, 0, 0, 1}));
   check_data(w, {1, 2, 3, 4}, "matmul: identity");
 
-  check_throws<std::domain_error>([&] { (void)mk({3}, {1, 2, 3}).cmatmul(v); }, "matmul: rank below 2");
-  check_throws<std::invalid_argument>([&] { (void)mk({2, 3}, {1, 2, 3, 4, 5, 6}).cmatmul(mk({2, 3}, {1, 2, 3, 4, 5, 6})); }, "matmul: inner dimensions");
-  check_throws<std::invalid_argument>([&] { (void)mk({2, 4, 3}, std::vector<dtype>(24)).cmatmul(mk({3, 3, 5}, std::vector<dtype>(45))); }, "matmul: batch dimensions");
-  check_throws<std::invalid_argument>([&] { (void)Tensor().cmatmul(v); }, "matmul: empty tensor");
+  check_throws<std::domain_error>([&] { (void)mk({3}, {1, 2, 3}).matmul(v); }, "matmul: rank below 2");
+  check_throws<std::invalid_argument>([&] { (void)mk({2, 3}, {1, 2, 3, 4, 5, 6}).matmul(mk({2, 3}, {1, 2, 3, 4, 5, 6})); }, "matmul: inner dimensions");
+  check_throws<std::invalid_argument>([&] { (void)mk({2, 4, 3}, std::vector<dtype>(24)).matmul(mk({3, 3, 5}, std::vector<dtype>(45))); }, "matmul: batch dimensions");
+  check_throws<std::invalid_argument>([&] { (void)Tensor().matmul(v); }, "matmul: empty tensor");
 }
 
 static void test_cat() {
   Tensor a = mk({2, 2}, {1, 2, 3, 4});
   Tensor b = mk({2, 3}, {5, 6, 7, 8, 9, 10});
 
-  const auto t = a.ccat(b, 1);
+  const auto t = a.cat(b, 1);
   check_shape(t, {2, 5}, "cat: shape");
   check_data(t, {1, 2, 5, 6, 7, 3, 4, 8, 9, 10}, "cat: data");
 
-  Tensor u = t;
-  u.cat(u, 1);
+  Tensor u = t.cat(u, 1);
   check_shape(u, {2, 10}, "cat self: shape");
   check_data(u, {1, 2, 5, 6, 7, 1, 2, 5, 6, 7, 3, 4, 8, 9, 10, 3, 4, 8, 9, 10}, "cat self: data");
 
-  const auto w = mk({3, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}).ccat(mk({3, 1, 2}, {13, 14, 15, 16, 17, 18}), 1);
+  const auto w = mk({3, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}).cat(mk({3, 1, 2}, {13, 14, 15, 16, 17, 18}), 1);
   check_shape(w, {3, 3, 2}, "cat 3d: shape");
   check_data(w, {1, 2, 3, 4, 13, 14, 5, 6, 7, 8, 15, 16, 9, 10, 11, 12, 17, 18}, "cat 3d: data");
 
-  check_throws<std::invalid_argument>([&] { (void)a.ccat(mk({3, 2}, {1, 2, 3, 4, 5, 6}), 1); }, "cat: mismatched dimensions");
-  check_throws<std::out_of_range>([&] { (void)a.ccat(b, 7); }, "cat: dim out of range");
+  check_throws<std::invalid_argument>([&] { (void)a.cat(mk({3, 2}, {1, 2, 3, 4, 5, 6}), 1); }, "cat: mismatched dimensions");
+  check_throws<std::out_of_range>([&] { (void)a.cat(b, 7); }, "cat: dim out of range");
 }
 
 static void test_stack() {
   Tensor a = mk({2, 3}, {1, 2, 3, 4, 5, 6});
   Tensor b = mk({2, 3}, {7, 8, 9, 10, 11, 12});
 
-  const auto s0 = a.cstack(b, 0);
+  const auto s0 = a.stack(b, 0);
   check_shape(s0, {2, 2, 3}, "stack(0): shape");
   check_data(s0, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, "stack(0): data");
 
-  const auto s1 = a.cstack(b, 1);
+  const auto s1 = a.stack(b, 1);
   check_shape(s1, {2, 2, 3}, "stack(1): shape");
   check_data(s1, {1, 2, 3, 7, 8, 9, 4, 5, 6, 10, 11, 12}, "stack(1): data");
 
-  const auto s2 = a.cstack(b, 2);
+  const auto s2 = a.stack(b, 2);
   check_shape(s2, {2, 3, 2}, "stack(rank): shape");
   check_data(s2, {1, 7, 2, 8, 3, 9, 4, 10, 5, 11, 6, 12}, "stack(rank): data");
 
   Tensor c = mk({2, 2, 3}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
-  const auto s3 = c.cstack(c, 2);
+  const auto s3 = c.stack(c, 2);
   check_shape(s3, {2, 2, 2, 3}, "stack 3d: shape");
   check_data(s3, {1, 2, 3, 1, 2, 3, 4, 5, 6, 4, 5, 6, 7, 8, 9, 7, 8, 9, 10, 11, 12, 10, 11, 12}, "stack 3d: data");
 
-  check_throws<std::invalid_argument>([&] { (void)a.cstack(mk({3, 2}, {1, 2, 3, 4, 5, 6}), 0); }, "stack: mismatched shapes");
-  check_throws<std::out_of_range>([&] { (void)a.cstack(b, 9); }, "stack: dim out of range");
+  check_throws<std::invalid_argument>([&] { (void)a.stack(mk({3, 2}, {1, 2, 3, 4, 5, 6}), 0); }, "stack: mismatched shapes");
+  check_throws<std::out_of_range>([&] { (void)a.stack(b, 9); }, "stack: dim out of range");
 }
 
 static void test_permute() {
   Tensor t = mk({2, 3, 2}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
 
-  const auto u = t.cpermute(2, 0, 1);
+  const auto u = t.permute(2, 0, 1);
   check_shape(u, {2, 2, 3}, "permute(2,0,1): shape");
   check_data(u, {1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12}, "permute(2,0,1): data");
 
-  const auto v = t.cpermute({1, 0, 2});
+  const auto v = t.permute({1, 0, 2});
   check_shape(v, {3, 2, 2}, "permute({1,0,2}): shape");
   check_data(v, {1, 2, 7, 8, 3, 4, 9, 10, 5, 6, 11, 12}, "permute({1,0,2}): data");
 
   const std::vector<size_t> p = {0, 2, 1};
-  const auto w = t.cpermute(p);
+  const auto w = t.permute(p);
   check_shape(w, {2, 2, 3}, "permute(vector): shape");
   check_data(w, {1, 3, 5, 2, 4, 6, 7, 9, 11, 8, 10, 12}, "permute(vector): data");
 
-  const auto id = t.cpermute(0, 1, 2);
+  const auto id = t.permute(0, 1, 2);
   check_shape(id, {2, 3, 2}, "permute(identity): shape");
   check_data(id, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, "permute(identity): data");
 
@@ -305,8 +304,8 @@ static void test_permute() {
   check_shape(m, {2, 2}, "permute in place: shape");
   check_data(m, {1, 3, 2, 4}, "permute in place: data");
 
-  check_throws<std::invalid_argument>([&] { (void)t.cpermute(0, 0, 1); }, "permute: not a permutation");
-  check_throws<std::invalid_argument>([&] { (void)t.cpermute(0, 1); }, "permute: wrong size");
+  check_throws<std::invalid_argument>([&] { (void)t.permute(0, 0, 1); }, "permute: not a permutation");
+  check_throws<std::invalid_argument>([&] { (void)t.permute(0, 1); }, "permute: wrong size");
 }
 
 int main() {

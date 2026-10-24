@@ -5,6 +5,7 @@
 #include <concepts>
 #include <initializer_list>
 #include <limits>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -19,16 +20,50 @@ namespace NN {
   // Element type for raw values.
   using dtype = float;
 
+  // forward decl
+  namespace Autograd {
+    struct GradFn;
+  }
+  struct Tensor;
+
+  // Data members of Tensor
+  struct Impl {
+    // Flat row-major storage. `data.size() == num_el`.
+    std::vector<dtype> data;
+    // Dimensions. `shape.size()` is the rank.
+    std::vector<size_t> shape;
+    // Row-major strides of `shape`.
+    std::vector<size_t> strides;
+    // `product(shape)`.
+    size_t num_el = 0;
+    // True if this tensor takes part in autograd. Always set when `grad_fn`
+    // is non-null; settable on a leaf to make it a differentiable input.
+    bool requires_grad = false;
+    // Accumulated gradient, or null before the first backward pass. When set,
+    // `grad->shape == shape`, and later passes add into it.
+    std::shared_ptr<Tensor> grad;
+    // Node that produced this tensor, or null for a leaf.
+    std::shared_ptr<Autograd::GradFn> grad_fn;
+  };
+
   // An N-dimensional, contiguous, row-major tensor.
   //
   // Arithmetic operators are element-wise and broadcast; `matmul()` is the
   // matrix product.
   //
-  // **In-place vs copy**
+  // **Copy semantics and in-place ops**
   //
-  // `cadd`/`csub`/`cmul` and `+`/`-`/`*` return a new, fully broadcast tensor.
-  // `add`/`sub`/`mul` and `+=`/`-=`/`*=` mutate in-place and require the result
-  // shape to equal the receiver's shape.
+  // `Tensor` is a handle: copying it (`Tensor b = a;`, `b = a;`) is O(1) and
+  // shares the underlying storage, so writes through one handle are visible
+  // through every other handle to the same data. Use `clone()` for an
+  // independent deep copy. A default-constructed or moved-from tensor is
+  // empty (`empty()` is true).
+  //
+  // `add`/`sub`/`mul`, `+`/`-`/`*`, `transpose`, `cat`, `reshape`, `sum`, ...
+  // return a fresh, fully broadcast tensor and never alias their inputs.
+  // `add_`/`sub_`/`mul_`, `+=`/`-=`/`*=` and `set_data` write through the
+  // shared storage, so every alias observes the change. They require the
+  // result shape to equal the receiver's shape.
   //
   // **Broadcasting**
   //
@@ -42,24 +77,20 @@ namespace NN {
   // {3}   += {2,3}  -> throws
   // ```
   struct Tensor {
-    // Flat row-major storage. `data.size() == num_el`.
-    std::vector<dtype> data;
-    // Dimensions. `shape.size()` is the rank.
-    std::vector<size_t> shape;
-    // Row-major strides of `shape`.
-    std::vector<size_t> strides;
-    // `product(shape)`.
-    size_t num_el{};
+    std::shared_ptr<Impl> p;
 
     Tensor() = default;
 
     Tensor(const Tensor &b) = default;
 
-    Tensor(Tensor &&b) noexcept : data(std::move(b.data)), shape(std::move(b.shape)), strides(std::move(b.strides)), num_el(b.num_el) { b.num_el = 0; }
+    Tensor(Tensor &&b) noexcept = default;
 
-    Tensor &operator=(const Tensor &b);
+    Tensor &operator=(const Tensor &b) = default;
 
-    Tensor &operator=(Tensor &&b) noexcept;
+    Tensor &operator=(Tensor &&b) noexcept = default;
+
+    // Constructs tensor from `std::shared_ptr<Impl>`.
+    explicit Tensor(std::shared_ptr<Impl> r) noexcept : p(std::move(r)) {}
 
     // Constructs a tensor from a shape range. Data is zero-initialized.
     //
@@ -67,28 +98,32 @@ namespace NN {
     // and `std::overflow_error` if the element count overflows `size_t`.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
-    explicit Tensor(R &&r) : shape(std::ranges::begin(r), std::ranges::end(r)) {
-      const size_t n = checked_num_el(shape);
+    explicit Tensor(R &&r) : p(std::make_shared<Impl>()) {
+      p->shape.assign_range(std::forward<R>(r));
+      const size_t n = checked_num_el(p->shape);
       finalize_shape(n, false);
     }
 
-    explicit Tensor(std::vector<size_t> &&v) : shape(std::move(v)) {
-      const size_t n = checked_num_el(shape);
+    explicit Tensor(std::vector<size_t> &&v) : p(std::make_shared<Impl>()) {
+      p->shape = std::move(v);
+      const size_t n = checked_num_el(p->shape);
       finalize_shape(n, false);
     }
 
     template <typename T>
       requires std::integral<T>
-    explicit Tensor(std::initializer_list<T> l) : shape(l.begin(), l.end()) {
-      const size_t n = checked_num_el(shape);
+    explicit Tensor(std::initializer_list<T> l) : p(std::make_shared<Impl>()) {
+      p->shape.assign_range(l.begin(), l.end());
+      const size_t n = checked_num_el(p->shape);
       finalize_shape(n, false);
     }
 
     // Convenience constructor, directly takes values.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    explicit Tensor(Args... dims) : shape{static_cast<size_t>(dims)...} {
-      const size_t n = checked_num_el(shape);
+    explicit Tensor(Args... dims) : p(std::make_shared<Impl>()) {
+      p->shape = std::vector{static_cast<size_t>(dims)...};
+      const size_t n = checked_num_el(p->shape);
       finalize_shape(n, false);
     }
 
@@ -99,14 +134,15 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, dtype> and std::ranges::sized_range<R>
     Tensor &set_data(R &&r) {
-      if (std::ranges::size(r) != checked_num_el(shape))
+      check_mutable();
+      if (std::ranges::size(r) != checked_num_el(p->shape))
         throw std::invalid_argument("Data ranges are of different size.");
-      data.assign_range(r);
-      num_el = data.size();
+      p->data.assign_range(r);
+      p->num_el = p->data.size();
       return *this;
     }
 
-    // Convenience form of `set_data` taking the values directly.
+    // Convenience form of `set_data`.
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... vals) {
@@ -133,6 +169,9 @@ namespace NN {
     // Same as the range overload, taking a shape vector.
     Tensor &set_dims(std::vector<size_t> &&v, const bool clear = true);
 
+    // Sets if the tensor needs gradient or not
+    void set_requires_grad(const bool x);
+
     // Element access with bounds checking. Accepts a sized random-access range of indices.
     //
     // Throws `std::invalid_argument` if the number of indices differs from the rank,
@@ -140,16 +179,16 @@ namespace NN {
     template <typename Self, typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
     decltype(auto) at(this Self &&self, R &&r) {
-      if (std::ranges::size(r) != self.shape.size())
+      if (std::ranges::size(r) != self.p->shape.size())
         throw std::invalid_argument("Number of indices doesnt match tensor rank.");
       auto it = std::ranges::begin(r); // supports more types
       size_t offset = 0;
-      for (size_t i = 0; i < self.shape.size(); i++) {
-        if (it[i] >= self.shape[i])
+      for (size_t i = 0; i < self.p->shape.size(); i++) {
+        if (it[i] >= self.p->shape[i])
           throw std::out_of_range("Tensor index out of bounds.");
-        offset += it[i] * self.strides[i];
+        offset += it[i] * self.p->strides[i];
       }
-      return self.data.at(offset);
+      return self.p->data.at(offset);
     }
 
     // Element access with bounds checking.
@@ -173,54 +212,54 @@ namespace NN {
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
     decltype(auto) operator[](this Self &&self, Args... idx) {
-      if (sizeof...(idx) != self.shape.size())
+      if (sizeof...(idx) != self.p->shape.size())
         throw std::invalid_argument("Number of indices doesnt match tensor rank.");
       std::array<size_t, sizeof...(Args)> tmp{static_cast<size_t>(idx)...};
       size_t offset = 0;
-      for (size_t i = 0; i < self.shape.size(); i++)
-        offset += tmp[i] * self.strides[i];
-      return self.data[offset];
+      for (size_t i = 0; i < self.p->shape.size(); i++)
+        offset += tmp[i] * self.p->strides[i];
+      return self.p->data[offset];
     }
 
-    // Reshapes in-place. The total element count must be preserved.
+    // Returns a new tensor with same data, with the provided shape.
+    // The total element count must be preserved.
     //
-    // Throws `std::invalid_argument` if the new shape is invalid or its element count differs from `num_el`,
-    // and `std::overflow_error` if the element count overflows `size_t`.
+    // Throws `std::invalid_argument` if the new shape is invalid or
+    // its element count differs from `num_el`, and `std::overflow_error`
+    // if the element count overflows `size_t`.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor &reshape(R &&r) {
+    Tensor reshape(R &&r) const {
+      if (empty())
+        throw std::invalid_argument("Empty tensor.");
       const size_t n = checked_num_el(r);
-      if (n != num_el)
+      Tensor x(std::forward<R>(r));
+      if (x.p->num_el != p->num_el)
         throw std::invalid_argument("Incompatible target shape.");
-      shape.assign_range(r);
-      finalize_shape(n, false);
-      return *this;
+      x.p->data = p->data;
+      return x;
     }
 
-    // Directly takes values for new shape.
+    // Takes the new shape as separate arguments.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor &reshape(Args... dims) {
+    Tensor reshape(Args... dims) const {
       return reshape(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(dims)...});
     }
 
-    // Reshapes in-place from an initializer list.
+    // Takes the new shape as an initializer list.
     template <typename T>
       requires std::integral<T>
-    Tensor &reshape(std::initializer_list<T> l) {
+    Tensor reshape(std::initializer_list<T> l) const {
       return reshape<std::initializer_list<T> &>(l);
     }
 
-    // Transposes a rank-2 tensor in-place: permutes `data` and recomputes
-    // strides. Not a view.
+    // Transposes a rank-2 tensor.
     //
     // Throws `std::invalid_argument` if the tensor is not rank 2 or is empty.
-    Tensor &transpose();
+    Tensor transpose() const;
 
-    // Copy-transpose.
-    Tensor ctranspose() const;
-
-    // Concatenates `b` onto this tensor along the existing dimension `dim`.
+    // Concatenates `b` with the tensor along the existing dimension `dim`.
     // Every dimension is kept, and `dim` holds `shape[dim] + b.shape[dim]`.
     //
     // The tensors must have equal rank and match on every dimension but `dim`.
@@ -228,10 +267,7 @@ namespace NN {
     // Throws `std::out_of_range` if `dim >= rank`, and `std::invalid_argument`
     // if the ranks differ, any dimension other than `dim` differs,
     // or either tensor is empty.
-    Tensor &cat(const Tensor &b, size_t dim);
-
-    // Copycat.
-    Tensor ccat(const Tensor &b, size_t dim) const;
+    Tensor cat(const Tensor &b, size_t dim) const;
 
     // Stacks `b` onto this tensor along a new dimension `dim`. The result has
     // rank + 1, with a size-2 axis inserted at `dim`; this tensor and `b` are
@@ -241,10 +277,7 @@ namespace NN {
     //
     // Throws `std::out_of_range` if `dim > rank`, and `std::invalid_argument`
     // if the shapes differ or either tensor is empty.
-    Tensor &stack(const Tensor &b, size_t dim);
-
-    // Copy-stack.
-    Tensor cstack(const Tensor &b, size_t dim) const;
+    Tensor stack(const Tensor &b, size_t dim) const;
 
     // Permutes tensor dimensions according to provided permutation.
     //
@@ -252,48 +285,34 @@ namespace NN {
     // the size doesn't match.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor &permute(R &&perm) {
-      *this = h_permute(std::forward<R>(perm));
-      return *this;
+    Tensor permute(R &&perm) const {
+      return h_permute(std::forward<R>(perm));
     }
 
     // Permutes from an initializer list.
     template <typename T>
       requires std::integral<T>
-    Tensor &permute(std::initializer_list<T> l) {
+    Tensor permute(std::initializer_list<T> l) const {
       return permute<std::initializer_list<T> &>(l);
     }
 
     // Convenience form of `permute`.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor &permute(Args... args) {
+    Tensor permute(Args... args) const {
       return permute(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(args)...});
-    }
-
-    // Copy-permute.
-    template <typename R>
-      requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor cpermute(R &&perm) const {
-      return h_permute(std::forward<R>(perm));
-    }
-
-    // Copy-permute from an initializer list.
-    template <typename T>
-      requires std::integral<T>
-    Tensor cpermute(std::initializer_list<T> l) const {
-      return cpermute<std::initializer_list<T> &>(l);
-    }
-
-    // Convenience form of `cpermute`.
-    template <typename... Args>
-      requires(std::integral<Args> and ...)
-    Tensor cpermute(Args... args) const {
-      return cpermute(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(args)...});
     }
 
     // True if the tensor holds no elements.
     bool empty() const;
+
+    // Checks if the tensor can be modified.
+    void check_mutable() const;
+
+    // Returns a deep copy of the data, shape and strides in a fresh Impl.
+    // The result is a leaf: requires_grad = false.
+    // Safe to mutate without affecting the source.
+    Tensor clone() const;
 
     // Throws unless both tensors have valid strides and consistent storage,
     // and neither is empty. Does not compare shapes.
@@ -320,56 +339,44 @@ namespace NN {
     //
     // Throws `std::out_of_range` if `dim >= rank`,
     // and `std::domain_error` for empty tensor.
-    Tensor &sum(size_t dim);
+    Tensor sum(size_t dim) const;
 
     // Reduces axis `dim` in-place by the mean.
-    Tensor &mean(size_t dim);
+    Tensor mean(size_t dim) const;
 
     // Reduces axis `dim` in-place by the maximum.
-    Tensor &max(size_t dim);
+    Tensor max(size_t dim) const;
 
     // Reduces axis `dim` in-place by the minimum.
-    Tensor &min(size_t dim);
-
-    // Copy-reduces axis `dim` by the sum.
-    Tensor csum(size_t dim) const;
-
-    // Copy-reduces axis `dim` by the mean.
-    Tensor cmean(size_t dim) const;
-
-    // Copy-reduces axis `dim` by the maximum.
-    Tensor cmax(size_t dim) const;
-
-    // Copy-reduces axis `dim` by the minimum.
-    Tensor cmin(size_t dim) const;
+    Tensor min(size_t dim) const;
 
     // Adds scalar `x` to every element in-place.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor &add(const dtype x);
+    Tensor add(const dtype x) const;
 
     // Subtracts scalar `x` from every element in-place.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor &sub(const dtype x);
+    Tensor sub(const dtype x) const;
 
     // Multiplies every element by scalar `x` in-place.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor &mul(const dtype x);
+    Tensor mul(const dtype x) const;
 
     // In-place element-wise add with broadcasting. `b` must broadcast into
     // `*this` without changing its shape.
     //
     // Throws `std::invalid_argument` if `b` does not broadcast into `shape`,
     // or if either tensor is empty or malformed.
-    Tensor &add(const Tensor &b);
+    Tensor add(const Tensor &b) const;
 
     // In-place element-wise subtract with broadcasting.
-    Tensor &sub(const Tensor &b);
+    Tensor sub(const Tensor &b) const;
 
     // In-place element-wise multiply with broadcasting.
-    Tensor &mul(const Tensor &b);
+    Tensor mul(const Tensor &b) const;
 
     // In-place matrix product.
     //
@@ -380,28 +387,25 @@ namespace NN {
     // Throws `std::domain_error` if either tensor is below rank 2, and
     // `std::invalid_argument` if the inner dimensions differ or the batch
     // dimensions cannot broadcast or if either tensor is empty or malformed.
-    Tensor &matmul(const Tensor &b);
+    Tensor matmul(const Tensor &b) const;
 
-    // Returns a copy with scalar `x` added.
-    Tensor cadd(const dtype x) const;
+    // In-place adds scalar `x` to the tensor.
+    Tensor &add_(const dtype x);
 
-    // Returns a copy with scalar `x` subtracted.
-    Tensor csub(const dtype x) const;
+    // In-place subtracts scalar `x` to the tensor.
+    Tensor &sub_(const dtype x);
 
-    // Returns a copy with every element multiplied by scalar `x`.
-    Tensor cmul(const dtype x) const;
+    // In-place multiplies scalar `x` to the tensor.
+    Tensor &mul_(const dtype x);
 
-    // Copy element-wise add with full broadcasting.
-    Tensor cadd(const Tensor &b) const;
+    // In-place element-wise add with full broadcasting.
+    Tensor &add_(const Tensor &b);
 
-    // Copy element-wise subtract with full broadcasting.
-    Tensor csub(const Tensor &b) const;
+    // In-place element-wise subtract with full broadcasting.
+    Tensor &sub_(const Tensor &b);
 
-    // Copy element-wise multiply with full broadcasting.
-    Tensor cmul(const Tensor &b) const;
-
-    // Copy matrix product. See `matmul(const Tensor &)` for the shape rules.
-    Tensor cmatmul(const Tensor &b) const;
+    // In-place element-wise multiply with full broadcasting.
+    Tensor &mul_(const Tensor &b);
 
     // Returns `a + b` as a new tensor with full broadcasting.
     static Tensor add(const Tensor &a, const Tensor &b);
@@ -480,7 +484,7 @@ namespace NN {
       requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
     void assign_shape(R &&dims, const bool clear) {
       const size_t n = checked_num_el(dims);
-      shape.assign_range(dims);
+      p->shape.assign_range(dims);
       finalize_shape(n, clear);
     }
 
@@ -511,7 +515,7 @@ namespace NN {
     Tensor h_reduce(size_t dim, dtype init, Op op) const {
       if (empty())
         throw std::domain_error("Cant reduce an empty tensor.");
-      const size_t n = shape.size();
+      const size_t n = p->shape.size();
       if (dim >= n)
         throw std::out_of_range("Out of bounds axis.");
       if (n == 1)
@@ -521,25 +525,25 @@ namespace NN {
       new_size.reserve(n - 1);
       for (size_t i = 0; i < n; i++)
         if (i != dim)
-          new_size.push_back(shape[i]);
+          new_size.push_back(p->shape[i]);
 
       Tensor ret(std::move(new_size));
-      for (size_t out = 0; out < ret.num_el; out++) {
+      for (size_t out = 0; out < ret.p->num_el; out++) {
         size_t offset = 0, tmp = out;
 
-        for (size_t i = n, j = ret.shape.size(); i-- > 0;) {
+        for (size_t i = n, j = ret.p->shape.size(); i-- > 0;) {
           if (i == dim)
             continue;
           j--;
-          const size_t c = tmp % ret.shape[j];
-          tmp /= ret.shape[j];
-          offset += c * strides[i];
+          const size_t c = tmp % ret.p->shape[j];
+          tmp /= ret.p->shape[j];
+          offset += c * p->strides[i];
         }
 
         auto val = init;
-        for (size_t k = 0; k < shape[dim]; k++)
-          val = op(val, data[offset + k * strides[dim]]);
-        ret.data[out] = val;
+        for (size_t k = 0; k < p->shape[dim]; k++)
+          val = op(val, p->data[offset + k * p->strides[dim]]);
+        ret.p->data[out] = val;
       }
 
       return ret;
@@ -552,7 +556,7 @@ namespace NN {
     Tensor h_permute(R &&perm) const {
       if (empty())
         throw std::invalid_argument("Empty tensor.");
-      const size_t n = shape.size();
+      const size_t n = p->shape.size();
       if (std::ranges::size(perm) != n)
         throw std::invalid_argument("`perm` needs to be of the same size.");
       if (not std::ranges::is_permutation(perm, std::views::iota(0uz, n)))
@@ -561,17 +565,17 @@ namespace NN {
       std::vector<size_t> new_shape(n);
       auto it = std::ranges::begin(perm);
       for (size_t i = 0; i < n; i++)
-        new_shape[i] = shape[it[i]];
+        new_shape[i] = p->shape[it[i]];
 
       Tensor ret(std::move(new_shape));
-      for (size_t idx = 0; idx < ret.num_el; idx++) {
+      for (size_t idx = 0; idx < ret.p->num_el; idx++) {
         size_t off = 0;
         for (size_t i = n, tmp = idx; i-- > 0;) {
-          const size_t c = tmp % ret.shape[i];
-          tmp /= ret.shape[i];
-          off += c * strides[it[i]];
+          const size_t c = tmp % ret.p->shape[i];
+          tmp /= ret.p->shape[i];
+          off += c * p->strides[it[i]];
         }
-        ret.data[idx] = data[off];
+        ret.p->data[idx] = p->data[off];
       }
 
       return ret;
@@ -591,21 +595,21 @@ namespace NN {
       requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
     Tensor &binary_inplace(const Tensor &b, Op op) {
       std::vector<size_t> scratch;
-      std::span<const size_t> bs = b.strides;
-      if (b.shape != shape) {
-        scratch = aligned_strides(b, shape);
+      std::span<const size_t> bs = b.p->strides;
+      if (b.p->shape != p->shape) {
+        scratch = aligned_strides(b, p->shape);
         bs = scratch;
       }
 
-      for (size_t i = 0; i < num_el; i++) {
+      for (size_t i = 0; i < p->num_el; i++) {
         size_t off = 0, tmp = i;
-        for (size_t k = shape.size(); k-- > 0;) {
-          const size_t c = tmp % shape[k];
-          tmp /= shape[k];
+        for (size_t k = p->shape.size(); k-- > 0;) {
+          const size_t c = tmp % p->shape[k];
+          tmp /= p->shape[k];
           off += c * bs[k];
         }
 
-        data[i] = op(data[i], b.data[off]);
+        p->data[i] = op(p->data[i], b.p->data[off]);
       }
       return *this;
     }
@@ -614,32 +618,32 @@ namespace NN {
     template <typename Op>
       requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
     static Tensor binary_broadcast(const Tensor &a, const Tensor &b, Op op) {
-      auto out = broadcast_shape(a.shape, b.shape);
+      auto out = broadcast_shape(a.p->shape, b.p->shape);
       const auto out_sz = out.size();
 
       std::vector<size_t> a_scratch, b_scratch;
-      std::span<const size_t> as = a.strides;
-      std::span<const size_t> bs = b.strides;
-      if (a.shape != out) {
+      std::span<const size_t> as = a.p->strides;
+      std::span<const size_t> bs = b.p->strides;
+      if (a.p->shape != out) {
         a_scratch = aligned_strides(a, out);
         as = a_scratch;
       }
-      if (b.shape != out) {
+      if (b.p->shape != out) {
         b_scratch = aligned_strides(b, out);
         bs = b_scratch;
       }
 
       Tensor ret(std::move(out));
-      for (size_t i = 0; i < ret.num_el; i++) {
+      for (size_t i = 0; i < ret.p->num_el; i++) {
         size_t a_off = 0, b_off = 0, tmp = i;
         for (size_t k = out_sz; k-- > 0;) {
-          const size_t c = tmp % ret.shape[k];
-          tmp /= ret.shape[k];
+          const size_t c = tmp % ret.p->shape[k];
+          tmp /= ret.p->shape[k];
           a_off += c * as[k];
           b_off += c * bs[k];
         }
 
-        ret.data[i] = op(a.data[a_off], b.data[b_off]);
+        ret.p->data[i] = op(a.p->data[a_off], b.p->data[b_off]);
       }
       return ret;
     }
