@@ -50,14 +50,14 @@ namespace NN {
   }
 
   void Tensor::finalize_shape(const size_t n, const bool clear) {
-    p->num_el = clear ? 0 : n;
+    p->num_el = n;
     p->strides.resize(p->shape.size());
     for (size_t i = 0, tmp = n; i < p->shape.size(); i++) {
       tmp /= p->shape[i];
       p->strides[i] = tmp;
     }
     if (clear)
-      p->data.clear();
+      p->data.assign(n, 0);
     else
       p->data.resize(n);
   }
@@ -200,7 +200,7 @@ namespace NN {
     return ret;
   }
 
-  bool Tensor::empty() const { return !p or p->num_el == 0; }
+  bool Tensor::empty() const { return !p; }
 
   void Tensor::set_requires_grad(const bool x) {
     if (empty())

@@ -34,7 +34,7 @@ namespace NN {
     std::vector<size_t> shape;
     // Row-major strides of `shape`.
     std::vector<size_t> strides;
-    // `product(shape)`.
+    // Number of stored elements; 0 for an empty tensor.
     size_t num_el = 0;
     // True if this tensor takes part in autograd. Always set when `grad_fn`
     // is non-null; settable on a leaf to make it a differentiable input.
@@ -92,6 +92,12 @@ namespace NN {
     // Constructs tensor from `std::shared_ptr<Impl>`.
     explicit Tensor(std::shared_ptr<Impl> r) noexcept : p(std::move(r)) {}
 
+    // Constructs a scalar
+    explicit Tensor(dtype x) : p(std::make_shared<Impl>()) {
+      p->num_el = 1;
+      p->data = {x};
+    }
+
     // Constructs a tensor from a shape range. Data is zero-initialized.
     //
     // Throws `std::invalid_argument` if the range is empty or contains a 0,
@@ -120,7 +126,7 @@ namespace NN {
 
     // Convenience constructor, directly takes values.
     template <typename... Args>
-      requires(std::integral<Args> and ...)
+      requires(sizeof...(Args) > 1) and (std::integral<Args> and ...)
     explicit Tensor(Args... dims) : p(std::make_shared<Impl>()) {
       p->shape = std::vector{static_cast<size_t>(dims)...};
       const size_t n = checked_num_el(p->shape);
@@ -318,8 +324,11 @@ namespace NN {
     // and neither is empty. Does not compare shapes.
     static void validate_pair(const Tensor &a, const Tensor &b);
 
-    // Sum of all elements. Returns 0 for an empty tensor.
-    dtype sum() const;
+    // Returns the sole element of the tensor.
+    //
+    // Throws `std::domain_error` if the tensor is empty or does not
+    // contain exactly one element.
+    dtype item() const;
 
     // Mean of all elements. Returns 0 for an empty tensor.
     dtype mean() const;
@@ -495,8 +504,6 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
     static size_t checked_num_el(R &&s) {
-      if (std::ranges::empty(s))
-        throw std::invalid_argument("Empty size vector.");
       size_t n = 1;
       for (size_t x : s) {
         if (x == 0)
@@ -518,8 +525,6 @@ namespace NN {
       const size_t n = p->shape.size();
       if (dim >= n)
         throw std::out_of_range("Out of bounds axis.");
-      if (n == 1)
-        throw std::domain_error("Cant reduce a scalar.");
 
       std::vector<size_t> new_size;
       new_size.reserve(n - 1);
