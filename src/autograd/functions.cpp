@@ -76,8 +76,7 @@ namespace NN::Autograd {
     };
     visit(root.p.get());
 
-    Tensor seed(root.p->shape);
-    seed.p->data.assign(seed.p->num_el, 1);
+    Tensor seed(1);
     accumulate(*root.p, seed);
 
     for (auto v : order | std::views::reverse) {
@@ -88,7 +87,6 @@ namespace NN::Autograd {
           throw std::logic_error("Requires backward rule, not present.");
         v->grad_fn->backward(*v->grad);
       }
-      v->grad.reset();
     }
   }
 } // namespace NN::Autograd

@@ -3,7 +3,6 @@
 #include "autograd/grad_fn.hpp"
 #include <algorithm>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -95,26 +94,58 @@ namespace NN {
     return *this;
   }
 
-  Tensor Tensor::transpose() const { return h_transpose(); }
+  Tensor Tensor::h_reshape(std::vector<size_t> &&v) const {
+    if (empty())
+      throw std::invalid_argument("Empty tensor.");
+    if (p->num_el != checked_num_el(v))
+      throw std::invalid_argument("Incompatible target shape.");
+
+    Tensor x(std::move(v));
+    x.p->data = p->data;
+    return x;
+  }
+
+  Tensor Tensor::reshape(std::vector<size_t> &&v) const {
+    auto r = h_reshape(std::move(v));
+    if (!p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, dz.reshape(ap->shape));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
 
   Tensor Tensor::h_transpose() const {
     if (empty())
       throw std::invalid_argument("Empty tensor.");
-    if (p->shape.size() != 2)
-      throw std::invalid_argument("Transpose requires 2D tensor.");
-    if (p->data.size() != p->num_el)
-      throw std::invalid_argument("Malformed tensor data.");
+    const size_t n = p->shape.size();
+    if (n < 2)
+      throw std::domain_error("Tensor needs to be rank >= 2 for transpose.");
 
-    const size_t r = p->shape[0], c = p->shape[1];
-    Tensor ret(c, r);
-    auto &data = p->data, &rdata = ret.p->data;
-    auto num_el = p->num_el;
-    for (size_t t = 0; t < num_el; t++)
-      rdata[t] = data[(t % r) * c + t / r];
-    return ret;
+    auto perm = std::views::iota(0zu, n) | std::ranges::to<std::vector>();
+    std::swap(perm[n - 2], perm[n - 1]);
+    return h_permute(std::move(perm));
   }
 
-  Tensor Tensor::cat(const Tensor &b, size_t dim) const { return h_cat(b, dim); }
+  Tensor Tensor::transpose() const {
+    auto r = h_transpose();
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, dz.h_transpose());
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
 
   Tensor Tensor::h_cat(const Tensor &b, size_t dim) const {
     if (empty() or b.empty())
@@ -160,30 +191,70 @@ namespace NN {
     return ret;
   }
 
-  Tensor Tensor::stack(const Tensor &b, size_t dim) const { return h_stack(b, dim); }
+  Tensor Tensor::cat(const Tensor &b, size_t dim) const {
+    auto r = h_cat(b, dim);
+
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+
+      fn->backward = [ap = p, bp = p, dim](const Tensor &dz) {
+        auto &ashape = ap->shape, &bshape = bp->shape;
+        auto &zdata = dz.p->data;
+        size_t inner = 1;
+        for (size_t i = dim + 1, n = ashape.size(); i < n; i++)
+          inner *= ashape[i];
+        const size_t a_block = ashape[dim] * inner;
+        const size_t b_block = bshape[dim] * inner;
+        const size_t outer = ap->num_el / a_block;
+
+        auto split_grad = [&](const std::vector<size_t> &shape, size_t blk, size_t off) {
+          Tensor d(shape);
+          auto &data = d.p->data;
+
+          for (size_t i = 0; i < outer; i++) {
+            const size_t dz_off = i * (a_block + b_block) + off;
+            const size_t d_off = i * blk;
+            std::copy_n(zdata.begin() + dz_off, blk, data.begin() + d_off);
+          }
+
+          return d;
+        };
+        if (ap->requires_grad)
+          accumulate(*ap, split_grad(ap->shape, a_block, 0));
+        if (bp->requires_grad)
+          accumulate(*bp, split_grad(bp->shape, b_block, a_block));
+      };
+
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
 
   Tensor Tensor::h_stack(const Tensor &b, size_t dim) const {
     if (empty() or b.empty())
       throw std::invalid_argument("Empty tensor.");
     auto &shape = p->shape;
-    if (dim > shape.size())
+    const size_t n = shape.size();
+    if (dim > n)
       throw std::out_of_range("dim is out of bounds.");
     if (shape != b.p->shape)
       throw std::invalid_argument("b is not of the same shape.");
 
-    const size_t axis = dim < shape.size() ? shape[dim] : 1;
+    const size_t axis = dim < n ? shape[dim] : 1;
     size_t inner = 1;
-    for (size_t i = dim + 1; i < shape.size(); i++)
+    for (size_t i = dim + 1; i < n; i++)
       inner *= shape[i];
     const size_t outer = p->num_el / inner / axis;
     const size_t block = axis * inner;
 
     std::vector<size_t> new_shape;
-    new_shape.reserve(shape.size() + 1);
+    new_shape.reserve(n + 1);
     for (size_t i = 0; i < dim; i++)
       new_shape.push_back(shape[i]);
     new_shape.push_back(2);
-    for (size_t i = dim; i < shape.size(); i++)
+    for (size_t i = dim; i < n; i++)
       new_shape.push_back(shape[i]);
     Tensor ret(std::move(new_shape));
 
@@ -205,6 +276,107 @@ namespace NN {
     }
 
     return ret;
+  }
+
+  Tensor Tensor::stack(const Tensor &b, size_t dim) const {
+    auto r = h_stack(b, dim);
+
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+
+      fn->backward = [ap = p, bp = b.p, dim](const Tensor &dz) {
+        const auto &shape = ap->shape;
+        const size_t n = shape.size();
+        size_t inner = 1;
+        for (size_t i = dim; i < n; i++)
+          inner *= shape[i];
+        const size_t block = inner;
+        const size_t outer = ap->num_el / inner;
+
+        auto split_grad = [&](const std::shared_ptr<Impl> &p, size_t which) {
+          Tensor d(p->shape);
+          for (size_t i = 0; i < outer; i++) {
+            const size_t src = i * 2 * block + which * block;
+            const size_t dst = i * block;
+            std::copy_n(dz.p->data.begin() + src, block, d.p->data.begin() + dst);
+          }
+          return d;
+        };
+
+        if (ap->requires_grad)
+          accumulate(*ap, split_grad(ap, 0));
+        if (bp->requires_grad)
+          accumulate(*bp, split_grad(bp, 1));
+      };
+
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+
+    return r;
+  }
+
+  Tensor Tensor::h_permute(std::vector<size_t> &&v) const {
+    if (empty())
+      throw std::invalid_argument("Empty tensor.");
+    const size_t n = p->shape.size();
+    if (v.size() != n)
+      throw std::invalid_argument("`perm` needs to be of the same size.");
+    if (not std::ranges::is_permutation(v, std::views::iota(0uz, n)))
+      throw std::invalid_argument("`perm` is not a permutation.");
+
+    std::vector<size_t> new_shape(n);
+    for (size_t i = 0; i < n; i++)
+      new_shape[i] = p->shape[v[i]];
+
+    Tensor r(std::move(new_shape));
+    for (size_t idx = 0; idx < r.p->num_el; idx++) {
+      size_t off = 0;
+      for (size_t i = n, tmp = idx; i-- > 0;) {
+        const size_t c = tmp % r.p->shape[i];
+        tmp /= r.p->shape[i];
+        off += c * p->strides[v[i]];
+      }
+      r.p->data[idx] = p->data[off];
+    }
+
+    return r;
+  }
+
+  Tensor Tensor::permute(std::vector<size_t> &&v) const {
+    auto r = h_permute(std::move(v));
+
+    if (p->requires_grad) {
+      // inverse permutation
+      const size_t n = p->shape.size();
+      for (size_t i = 0; i < n; i++) {
+        if (v[i] >= n)
+          continue;
+        size_t cur = i;
+        size_t next = v[cur];
+        while (next != i) {
+          size_t tmp = v[next];
+          v[next] = cur + n;
+          cur = next;
+          next = tmp;
+        }
+        v[i] = cur + n;
+      }
+      for (auto &x : v)
+        x -= n;
+
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, inv = std::move(v)](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, dz.permute(inv));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+
+    return r;
   }
 
   bool Tensor::empty() const { return !p; }
@@ -251,10 +423,28 @@ namespace NN {
     return p->data[0];
   }
 
-  Tensor Tensor::sum() const {
+  Tensor Tensor::h_sum() const {
     if (empty())
       throw std::domain_error("Empty tensor.");
-    return Tensor(std::ranges::fold_left(p->data, 0, [](dtype s, dtype x) { return s + x; }));
+    return Tensor(std::ranges::fold_left(p->data, 0, std::plus<>()));
+  }
+
+  Tensor Tensor::sum() const {
+    auto r = h_sum();
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p](const Tensor &dz) {
+        if (!ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+        std::ranges::fill(dx.p->data, dz.p->data[0]);
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::mean() const {
@@ -266,41 +456,204 @@ namespace NN {
   Tensor Tensor::min() const {
     if (empty())
       throw std::domain_error("Empty tensor.");
-    return Tensor(*std::ranges::min_element(p->data));
+
+    const auto idx = std::ranges::min_element(p->data) - p->data.begin();
+    Tensor r(p->data[idx]);
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, idx](const Tensor &dz) {
+        if (ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+        dx.p->data[idx] = dz.p->data[0];
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::max() const {
     if (empty())
       throw std::domain_error("Empty tensor.");
-    return Tensor(*std::ranges::max_element(p->data));
+
+    const auto idx = std::ranges::max_element(p->data) - p->data.begin();
+    Tensor r(p->data[idx]);
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, idx](const Tensor &dz) {
+        if (ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+        dx.p->data[idx] = dz.p->data[0];
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
-  Tensor Tensor::sum(size_t dim) const { return h_reduce(dim, 0.0f, std::plus<>()); }
+  Tensor Tensor::expand(size_t dim, size_t size) const {
+    if (empty())
+      throw std::domain_error("Empty tensor.");
+    const auto &shape = p->shape;
+    const size_t n = shape.size();
+    if (dim > n)
+      throw std::out_of_range("Out of bounds axis.");
 
-  Tensor Tensor::mean(size_t dim) const { return h_mean(dim); }
+    size_t inner = 1;
+    for (size_t i = dim; i < n; i++)
+      inner *= shape[i];
+    const size_t outer = p->num_el / inner;
 
-  Tensor Tensor::h_mean(size_t dim) const {
+    std::vector<size_t> new_shape;
+    new_shape.reserve(n + 1);
+    for (size_t i = 0; i < dim; i++)
+      new_shape.push_back(shape[i]);
+    new_shape.push_back(size);
+    for (size_t i = dim; i < n; i++)
+      new_shape.push_back(shape[i]);
+
+    Tensor r(std::move(new_shape));
+    auto &data = p->data, &rdata = r.p->data;
+    for (size_t i = 0; i < outer; i++) {
+      for (size_t j = 0; j < size; j++) {
+        std::copy_n(data.begin() + i * inner, inner, rdata.begin() + i * size * inner + j * inner);
+      }
+    }
+
+    return r;
+  }
+
+  Tensor Tensor::h_sum(size_t dim) const { return h_reduce(dim, 0, std::plus<>()); }
+
+  Tensor Tensor::sum(size_t dim) const {
+    auto r = h_sum(dim);
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, dim](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, dz.expand(dim, ap->shape[dim]));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
+
+  Tensor Tensor::mean(size_t dim) const {
     if (empty())
       throw std::invalid_argument("Empty tensor.");
     if (dim >= p->shape.size())
       throw std::out_of_range("Out of bounds axis.");
     const dtype f = p->shape[dim];
-    auto ret = h_reduce(dim, dtype{0}, std::plus<>());
-    std::ranges::for_each(ret.p->data, [f](dtype &x) { x /= f; });
-    return ret;
+    auto r = h_reduce(dim, dtype{0}, std::plus<>());
+    for (auto &x : r.p->data)
+      x /= f;
+
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, dim](const Tensor &dz) {
+        if (ap->requires_grad)
+          return;
+        auto dx = dz.expand(dim, ap->shape[dim]);
+        const dtype f = ap->shape[dim];
+        for (auto &x : dx.p->data)
+          x /= f;
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::max(size_t dim) const {
-    return h_reduce(dim, std::numeric_limits<dtype>::lowest(), [](dtype x, dtype v) { return std::max(x, v); });
+    auto [r, idx] = h_cmp(dim, std::greater<>());
+
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
+        if (ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+
+        auto &xdata = dx.p->data, &zdata = dz.p->data;
+        auto &zshape = dz.p->shape, &shape = ap->shape;
+        auto &strides = ap->strides;
+
+        for (size_t out = 0, n = dx.p->num_el; out < n; out++) {
+          size_t off = 0, tmp = out;
+          for (size_t i = shape.size(), j = zshape.size(); i-- > 0;) {
+            if (i == dim)
+              continue;
+            j--;
+            const size_t c = tmp % zshape[j];
+            tmp /= zshape[j];
+            off += c * strides[i];
+          }
+          xdata[off + idx[out] * strides[dim]] = zdata[out];
+        }
+
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::min(size_t dim) const {
-    return h_reduce(dim, std::numeric_limits<dtype>::max(), [](dtype x, dtype v) { return std::min(x, v); });
+    auto [r, idx] = h_cmp(dim, std::less<>());
+
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
+        if (ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+
+        auto &xdata = dx.p->data, &zdata = dz.p->data;
+        auto &zshape = dz.p->shape, &shape = ap->shape;
+        auto &strides = ap->strides;
+
+        for (size_t out = 0, n = dx.p->num_el; out < n; out++) {
+          size_t off = 0, tmp = out;
+          for (size_t i = shape.size(), j = zshape.size(); i-- > 0;) {
+            if (i == dim)
+              continue;
+            j--;
+            const size_t c = tmp % zshape[j];
+            tmp /= zshape[j];
+            off += c * strides[i];
+          }
+          xdata[off + idx[out] * strides[dim]] = zdata[out];
+        }
+
+        accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
+
+  Tensor Tensor::h_add(const dtype x) const {
+    auto r = clone();
+    std::ranges::for_each(r.p->data, [x](dtype &v) { v += x; });
+    return r;
   }
 
   Tensor Tensor::add(const dtype x) const {
-    auto r = clone();
-    std::ranges::for_each(r.p->data, [x](dtype &v) { v += x; });
+    auto r = h_add(x);
     if (p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
@@ -317,6 +670,7 @@ namespace NN {
   Tensor Tensor::add(const Tensor &b) const {
     validate(*this, b);
     auto r = binary_broadcast(*this, b, std::plus<>());
+
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
@@ -332,7 +686,10 @@ namespace NN {
     return r;
   }
 
-  Tensor Tensor::add(const Tensor &a, const Tensor &b) { return a.add(b); }
+  Tensor Tensor::add(const Tensor &a, const Tensor &b) {
+    validate(a, b);
+    return binary_broadcast(a, b, std::plus<>());
+  }
 
   Tensor &Tensor::add_(const dtype x) {
     check_mutable();
@@ -350,11 +707,12 @@ namespace NN {
     return binary_inplace(b, std::plus<>());
   }
 
-  Tensor Tensor::sub(const dtype x) const { return add(-x); }
+  Tensor Tensor::sub(const dtype x) const { return h_add(-x); }
 
   Tensor Tensor::sub(const Tensor &b) const {
     validate(*this, b);
     auto r = binary_broadcast(*this, b, std::minus<>());
+
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
@@ -370,7 +728,10 @@ namespace NN {
     return r;
   }
 
-  Tensor Tensor::sub(const Tensor &a, const Tensor &b) { return a.sub(b); }
+  Tensor Tensor::sub(const Tensor &a, const Tensor &b) {
+    validate(a, b);
+    return binary_broadcast(a, b, std::minus<>());
+  }
 
   Tensor &Tensor::sub_(const dtype x) { return add_(-x); }
 
@@ -387,6 +748,7 @@ namespace NN {
   Tensor Tensor::mul(const Tensor &b) const {
     validate(*this, b);
     auto r = binary_broadcast(*this, b, std::multiplies<>());
+
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
@@ -407,6 +769,7 @@ namespace NN {
       throw std::invalid_argument("Empty tensor.");
     auto r = clone();
     std::ranges::for_each(r.p->data, [x](dtype &v) { v *= x; });
+
     if (p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
@@ -417,7 +780,10 @@ namespace NN {
     return r;
   }
 
-  Tensor Tensor::mul(const Tensor &a, const Tensor &b) { return a.mul(b); }
+  Tensor Tensor::mul(const Tensor &a, const Tensor &b) {
+    validate(a, b);
+    return binary_broadcast(a, b, std::multiplies<>());
+  }
 
   Tensor &Tensor::mul_(const dtype x) {
     check_mutable();
@@ -434,10 +800,6 @@ namespace NN {
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::multiplies<>());
   }
-
-  Tensor Tensor::matmul(const Tensor &b) const { return h_matmul(b); }
-
-  Tensor Tensor::matmul(const Tensor &a, const Tensor &b) { return a.h_matmul(b); }
 
   Tensor Tensor::h_matmul(const Tensor &b) const {
     validate(*this, b);
@@ -521,6 +883,30 @@ namespace NN {
     ret.set_data(std::move(out));
     return ret;
   }
+
+  Tensor Tensor::matmul(const Tensor &b) const {
+    auto r = h_matmul(b);
+
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+
+      fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
+        Tensor a(ap), b(bp);
+        auto a_t = a.h_transpose(), b_t = b.h_transpose();
+        if (ap->requires_grad)
+          accumulate(*ap, sum_to_shape(dz.h_matmul(b_t), ap->shape));
+        if (bp->requires_grad)
+          accumulate(*bp, sum_to_shape(a_t.h_matmul(dz), bp->shape));
+      };
+
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
+
+  Tensor Tensor::matmul(const Tensor &a, const Tensor &b) { return a.h_matmul(b); }
 
   Tensor Tensor::operator-() const {
     auto r = clone();

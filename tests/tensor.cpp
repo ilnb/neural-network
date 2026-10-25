@@ -116,9 +116,6 @@ static void test_transpose() {
   check_strides(t, {2, 1}, "transpose: strides");
   check_data(t, {1, 4, 2, 5, 3, 6}, "transpose: data");
 
-  Tensor x(2, 3, 4);
-  check_throws<std::invalid_argument>([&] { x.transpose(); }, "transpose: rank is not 2");
-
   Tensor r = mk({2, 3}, {1, 2, 3, 4, 5, 6});
   r = r.transpose().transpose();
   check_shape(r, {2, 3}, "double transpose: shape");

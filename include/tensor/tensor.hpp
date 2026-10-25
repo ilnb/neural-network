@@ -9,6 +9,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -249,29 +250,17 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
     Tensor reshape(R &&r) const {
-      if (empty())
-        throw std::invalid_argument("Empty tensor.");
-      const size_t n = checked_num_el(r);
-      Tensor x(std::forward<R>(r));
-      if (x.p->num_el != p->num_el)
-        throw std::invalid_argument("Incompatible target shape.");
-      x.p->data = p->data;
-      return x;
+      return h_reshape(std::vector<size_t>(std::ranges::begin(r), std::ranges::end(r)));
     }
 
     // Takes the new shape as separate arguments.
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor reshape(Args... dims) const {
-      return reshape(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(dims)...});
+      return h_reshape(std::vector{static_cast<size_t>(dims)...});
     }
 
-    // Takes the new shape as an initializer list.
-    template <typename T>
-      requires std::integral<T>
-    Tensor reshape(std::initializer_list<T> l) const {
-      return reshape<std::initializer_list<T> &>(l);
-    }
+    Tensor reshape(std::vector<size_t> &&v) const;
 
     // Transposes a rank-2 tensor.
     //
@@ -304,23 +293,18 @@ namespace NN {
     // the size doesn't match.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor permute(R &&perm) const {
-      return h_permute(std::forward<R>(perm));
-    }
-
-    // Permutes from an initializer list.
-    template <typename T>
-      requires std::integral<T>
-    Tensor permute(std::initializer_list<T> l) const {
-      return permute<std::initializer_list<T> &>(l);
+    Tensor permute(R &&r) const {
+      return h_permute(std::vector<size_t>(std::ranges::begin(r), std::ranges::end(r)));
     }
 
     // Convenience form of `permute`.
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor permute(Args... args) const {
-      return permute(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(args)...});
+      return h_permute(std::vector{static_cast<size_t>(args)...});
     }
+
+    Tensor permute(std::vector<size_t> &&v) const;
 
     // True if the tensor holds no elements.
     bool empty() const;
@@ -332,6 +316,13 @@ namespace NN {
     // The result is a leaf: requires_grad = false.
     // Safe to mutate without affecting the source.
     Tensor clone() const;
+
+    // Inserts a dimension of `size` at `dim`, expanding the tensor along that
+    // dimension by repeating its data.
+    //
+    // Throws `std::invalid_argument` on empty tensor,
+    // or `std::out_of_range` on out of bounds dim.
+    Tensor expand(size_t dim, size_t size) const;
 
     // Wrapper around Autograd::backward
     void backward() const;
@@ -359,6 +350,8 @@ namespace NN {
     // Throws `std::domain_error` for an empty tensor.
     Tensor sum() const;
 
+    Tensor h_sum() const;
+
     // Mean of all elements.
     //
     // Throws `std::domain_error` for an empty tensor.
@@ -380,6 +373,8 @@ namespace NN {
     // Throws `std::out_of_range` if `dim >= rank`,
     // and `std::domain_error` for empty tensor.
     Tensor sum(size_t dim) const;
+
+    Tensor h_sum(size_t dim) const;
 
     // Reduces axis `dim` in-place by the mean.
     Tensor mean(size_t dim) const;
@@ -579,64 +574,95 @@ namespace NN {
         ret = Tensor(init);
       else
         ret.set_dims(std::move(new_size), false);
-      for (size_t out = 0; out < ret.p->num_el; out++) {
+      auto &data = p->data, &rdata = ret.p->data;
+      auto &strides = p->strides, &rstrides = ret.p->strides;
+      auto &shape = p->shape, &rshape = ret.p->shape;
+
+      for (size_t out = 0, itr = ret.p->num_el; out < itr; out++) {
         size_t offset = 0, tmp = out;
 
-        for (size_t i = n, j = ret.p->shape.size(); i-- > 0;) {
+        for (size_t i = n, j = rshape.size(); i-- > 0;) {
           if (i == dim)
             continue;
           j--;
-          const size_t c = tmp % ret.p->shape[j];
-          tmp /= ret.p->shape[j];
-          offset += c * p->strides[i];
+          const size_t c = tmp % rshape[j];
+          tmp /= rshape[j];
+          offset += c * strides[i];
         }
 
         auto val = init;
-        for (size_t k = 0; k < p->shape[dim]; k++)
-          val = op(val, p->data[offset + k * p->strides[dim]]);
-        ret.p->data[out] = val;
+        for (size_t k = 0; k < shape[dim]; k++)
+          val = op(val, data[offset + k * strides[dim]]);
+        rdata[out] = val;
       }
 
       return ret;
     }
 
-    Tensor h_mean(size_t dim) const;
-
-    template <typename R>
-      requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor h_permute(R &&perm) const {
+    template <typename Op>
+      requires std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, bool> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
+    std::pair<Tensor, std::vector<size_t>> h_cmp(size_t dim, Op op) const {
       if (empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::domain_error("Empty tensor.");
       const size_t n = p->shape.size();
-      if (std::ranges::size(perm) != n)
-        throw std::invalid_argument("`perm` needs to be of the same size.");
-      if (not std::ranges::is_permutation(perm, std::views::iota(0uz, n)))
-        throw std::invalid_argument("`perm` is not a permutation.");
+      if (dim >= n)
+        throw std::out_of_range("Out of bounds axis.");
 
-      std::vector<size_t> new_shape(n);
-      auto it = std::ranges::begin(perm);
+      std::vector<size_t> new_size;
+      new_size.reserve(n - 1);
       for (size_t i = 0; i < n; i++)
-        new_shape[i] = p->shape[it[i]];
+        if (i != dim)
+          new_size.push_back(p->shape[i]);
 
-      Tensor ret(std::move(new_shape));
-      for (size_t idx = 0; idx < ret.p->num_el; idx++) {
-        size_t off = 0;
-        for (size_t i = n, tmp = idx; i-- > 0;) {
-          const size_t c = tmp % ret.p->shape[i];
-          tmp /= ret.p->shape[i];
-          off += c * p->strides[it[i]];
+      Tensor ret;
+      if (new_size.empty())
+        ret = Tensor(p->data[0]);
+      else
+        ret.set_dims(std::move(new_size), false);
+      std::vector<size_t> indices(ret.p->num_el);
+
+      auto &data = p->data, &rdata = ret.p->data;
+      auto &strides = p->strides, &rstrides = ret.p->strides;
+      auto &shape = p->shape, &rshape = ret.p->shape;
+
+      for (size_t out = 0, itr = ret.p->num_el; out < itr; out++) {
+        size_t offset = 0, tmp = out;
+
+        for (size_t i = n, j = rshape.size(); i-- > 0;) {
+          if (i == dim)
+            continue;
+          j--;
+          const size_t c = tmp % rshape[j];
+          tmp /= rshape[j];
+          offset += c * strides[i];
         }
-        ret.p->data[idx] = p->data[off];
+
+        auto val = data[offset];
+        size_t idx = 0;
+        for (size_t k = 1; k < shape[dim]; k++) {
+          if (auto nval = data[offset + k * strides[dim]]; op(nval, val)) {
+            val = nval;
+            idx = k;
+          }
+        }
+        rdata[out] = val;
+        indices[out] = idx;
       }
 
-      return ret;
+      return {std::move(ret), std::move(indices)};
     }
+
+    Tensor h_reshape(std::vector<size_t> &&v) const;
+
+    Tensor h_permute(std::vector<size_t> &&v) const;
 
     Tensor h_transpose() const;
 
     Tensor h_cat(const Tensor &b, size_t dim) const;
 
     Tensor h_stack(const Tensor &b, size_t dim) const;
+
+    Tensor h_add(const dtype x) const;
 
     Tensor h_matmul(const Tensor &b) const;
 
