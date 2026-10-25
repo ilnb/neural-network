@@ -134,6 +134,7 @@ namespace NN {
     }
 
     // Copies `r` into `data`. `r` must have exactly `num_el` elements.
+    // The source range must not alias the tensor's internal storage.
     //
     // Throws `std::invalid_argument` on a size mismatch or if the new shape is invalid,
     // and `std::overflow_error` if the element count overflows `size_t`.
@@ -157,12 +158,14 @@ namespace NN {
     }
 
     // Moves `v` into `data`. `v` must have exactly `num_el` elements.
+    // The source range must not alias the tensor's internal storage.
     //
     // Throws `std::invalid_argument` on a size mismatch.
     Tensor &set_data(std::vector<dtype> &&v);
 
     // Sets the shape from `r` and recomputes strides.
     // `data` is emptied if `clear` is set, resized otherwise.
+    // The source range must not alias the tensor's internal storage.
     //
     // Throws `std::invalid_argument` if the range is empty or contains a 0,
     // and `std::overflow_error` if the element count overflows `size_t`.
@@ -173,6 +176,13 @@ namespace NN {
         check_mutable();
       assign_shape(std::forward<R>(r), clear);
       return *this;
+    }
+
+    // Convenience form of `set_dims`.
+    template <typename... Args>
+      requires(std::integral<Args> and ...)
+    Tensor &set_dims(Args... vals) {
+      return set_dims(std::vector<size_t>{static_cast<size_t>(vals)...});
     }
 
     // Same as the range overload, taking a shape vector.
@@ -334,7 +344,6 @@ namespace NN {
 
     // Validates multiple tensors.
     template <typename... Args>
-      requires(sizeof...(Args) > 1)
     static void validate(const Args &...args) {
       (args.validate(), ...);
     }
