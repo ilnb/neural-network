@@ -1,6 +1,5 @@
 #include "nn/loss.hpp"
 #include <cmath>
-#include <limits>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -38,10 +37,8 @@ static void test_mse() {
 }
 
 static void test_bce_values() {
-  check_close(Loss::bce(mk({3}, {0.5f, 0.9f, 0.1f}), mk({3}, {0, 1, 0})), 0.3012894f, 1e-6f,
-              "bce: mixed labels");
-  check_close(Loss::bce(mk({2}, {0.7f, 0.1f}), mk({2}, {1, 0})), 0.2310177f, 1e-6f,
-              "bce: both label directions");
+  check_close(Loss::bce(mk({3}, {0.5f, 0.9f, 0.1f}), mk({3}, {0, 1, 0})), 0.3012894f, 1e-6f, "bce: mixed labels");
+  check_close(Loss::bce(mk({2}, {0.7f, 0.1f}), mk({2}, {1, 0})), 0.2310177f, 1e-6f, "bce: both label directions");
   check_close(Loss::bce(mk({1}, {0.9f}), mk({1}, {1})), 0.1053605f, 1e-6f, "bce: y=1 uses log(p)");
   check_close(Loss::bce(mk({1}, {0.9f}), mk({1}, {0})), 2.3025851f, 1e-6f, "bce: y=0 uses log(1-p)");
 }
@@ -51,8 +48,7 @@ static void test_bce_edges() {
   check(std::isinf(Loss::bce(mk({1}, {1}), mk({1}, {0}))), "bce: p=1, y=0 -> inf");
   check_close(Loss::bce(mk({1}, {0}), mk({1}, {0})), 0, 0, "bce: p=0, y=0 -> 0");
   check_close(Loss::bce(mk({1}, {1}), mk({1}, {1})), 0, 0, "bce: p=1, y=1 -> 0");
-  check_close(Loss::bce(mk({2}, {0.5f, 0.5f}), mk({2}, {0, 0})), 0.6931472f, 1e-6f,
-              "bce: all-zero targets keep their contribution");
+  check_close(Loss::bce(mk({2}, {0.5f, 0.5f}), mk({2}, {0, 0})), 0.6931472f, 1e-6f, "bce: all-zero targets keep their contribution");
 }
 
 static void test_ce_values() {
@@ -61,8 +57,7 @@ static void test_ce_values() {
 
   check_close(Loss::ce(pred, target), 0.7531091f, 1e-6f, "ce: defaults to the last axis");
   check_close(Loss::ce(pred, target, 1), 0.7531091f, 1e-6f, "ce: dim=1 explicit");
-  check_close(Loss::ce(mk({2}, {0.3f, 0.7f}), mk({2}, {0, 1})), 0.3566749f, 1e-6f,
-              "ce: rank-1 defaults to dim=0");
+  check_close(Loss::ce(mk({2}, {0.3f, 0.7f}), mk({2}, {0, 1})), 0.3566749f, 1e-6f, "ce: rank-1 defaults to dim=0");
 }
 
 static void test_ce_axes() {
@@ -77,10 +72,7 @@ static void test_ce_rank3() {
   check_close(Loss::ce(pred, target, 1), 1.1968729f, 1e-6f, "ce: dim=1 averages over the remaining axes");
 }
 
-static void test_ce_soft_labels() {
-  check_close(Loss::ce(mk({1, 2}, {0.5f, 0.5f}), mk({1, 2}, {0.25f, 0.75f})), 0.6931472f, 1e-6f,
-              "ce: soft labels");
-}
+static void test_ce_soft_labels() { check_close(Loss::ce(mk({1, 2}, {0.5f, 0.5f}), mk({1, 2}, {0.25f, 0.75f})), 0.6931472f, 1e-6f, "ce: soft labels"); }
 
 static void test_ce_binary_matches_bce() {
   Tensor pred = mk({2, 2}, {0.3f, 0.7f, 0.9f, 0.1f});
@@ -89,8 +81,7 @@ static void test_ce_binary_matches_bce() {
   const dtype bce = Loss::bce(mk({2}, {0.7f, 0.1f}), mk({2}, {1, 0}));
 
   check_close(ce, bce, 1e-6f, "ce with C=2 equals bce on the positive class");
-  check_close(Loss::ce(mk({1, 2}, {0.3f, 0.7f}), mk({1, 2}, {0, 1}), 1), 0.3566749f, 1e-6f,
-              "ce with C=2 matches bce for a single sample");
+  check_close(Loss::ce(mk({1, 2}, {0.3f, 0.7f}), mk({1, 2}, {0, 1}), 1), 0.3566749f, 1e-6f, "ce with C=2 matches bce for a single sample");
 }
 
 static void test_ce_edges() {

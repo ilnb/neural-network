@@ -10,4 +10,6 @@ namespace NN::Act {
   Tensor sigmoid(const Tensor &x);
 
   Tensor softmax(const Tensor &x, size_t dim);
+
+  Tensor log_softmax(const Tensor &x, size_t dim);
 } // namespace NN::Act

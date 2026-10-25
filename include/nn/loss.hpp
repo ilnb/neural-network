@@ -13,5 +13,8 @@ namespace NN::Loss {
   dtype ce(const Tensor &pred, const Tensor &target, size_t dim);
 
   // CE loss over the last axis
-  inline dtype ce(const Tensor &pred, const Tensor &target) { return ce(pred, target, pred.shape.size() - 1); }
+  inline dtype ce(const Tensor &pred, const Tensor &target) {
+    Tensor::validate(pred, target);
+    return ce(pred, target, pred.p->shape.size() - 1);
+  }
 } // namespace NN::Loss

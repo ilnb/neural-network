@@ -4,29 +4,31 @@
 #include <stdexcept>
 
 namespace NN::Loss {
-  // Mean Squared Error
   dtype mse(const Tensor &pred, const Tensor &target) {
-    Tensor::validate_pair(pred, target);
-    if (pred.shape != target.shape)
+    Tensor::validate(pred, target);
+    if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
 
     double sum = 0;
-    for (size_t i = 0; i < pred.num_el; i++) {
-      const double d = static_cast<double>(pred.data[i]) - static_cast<double>(target.data[i]);
+    auto num_el = pred.p->num_el;
+    auto &pdata = pred.p->data, &tdata = target.p->data;
+    for (size_t i = 0; i < num_el; i++) {
+      const double d = static_cast<double>(pdata[i]) - static_cast<double>(tdata[i]);
       sum += d * d;
     }
-    return static_cast<dtype>(sum / static_cast<double>(pred.num_el));
+    return static_cast<dtype>(sum / static_cast<double>(num_el));
   }
 
-  // Binary Cross Entropy loss
   dtype bce(const Tensor &pred, const Tensor &target) {
-    Tensor::validate_pair(pred, target);
-    if (pred.shape != target.shape)
+    Tensor::validate(pred, target);
+    if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
 
     double sum = 0;
-    for (size_t i = 0; i < pred.num_el; i++) {
-      double y = target.data[i], p = pred.data[i];
+    auto num_el = pred.p->num_el;
+    auto &pdata = pred.p->data, &tdata = target.p->data;
+    for (size_t i = 0; i < num_el; i++) {
+      double y = tdata[i], p = pdata[i];
       if (y != 0 and y != 1)
         throw std::invalid_argument("Malformed tensor data. Entries should be binary.");
       if (p == 0) {
@@ -43,22 +45,23 @@ namespace NN::Loss {
       sum -= y * std::log(p);
       sum -= (1 - y) * std::log(1 - p);
     }
-    return static_cast<dtype>(sum / static_cast<double>(pred.num_el));
+    return static_cast<dtype>(sum / static_cast<double>(num_el));
   }
 
-  // Cross Entropy loss
   dtype ce(const Tensor &pred, const Tensor &target, size_t dim) {
-    Tensor::validate_pair(pred, target);
-    if (pred.shape != target.shape)
+    Tensor::validate(pred, target);
+    if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
-    if (dim >= pred.shape.size())
+    if (dim >= pred.p->shape.size())
       throw std::out_of_range("Class axis out of range.");
 
-    const auto slices = static_cast<double>(pred.num_el) / pred.shape[dim];
+    auto num_el = pred.p->num_el;
+    auto &pdata = pred.p->data, &tdata = target.p->data;
+    const auto slices = static_cast<double>(num_el) / pred.p->shape[dim];
     double sum = 0;
 
-    for (size_t i = 0; i < pred.num_el; i++) {
-      const double y = target.data[i], p = pred.data[i];
+    for (size_t i = 0; i < num_el; i++) {
+      const double y = tdata[i], p = pdata[i];
       if (y < 0 or y > 1)
         throw std::invalid_argument("Malformed tensor data. Targets must lie in [0, 1].");
       if (y == 0)
