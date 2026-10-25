@@ -226,15 +226,15 @@ namespace NN {
       throw std::logic_error("In-place op involving autograd tensor.");
   }
 
-  void Tensor::validate_pair(const Tensor &a, const Tensor &b) {
-    if (a.empty() or b.empty())
+  void Tensor::validate() const {
+    if (empty())
       throw std::invalid_argument("Empty tensor.");
 
-    if (not a.valid_strides() or not b.valid_strides())
+    if (not valid_strides())
       throw std::invalid_argument("Malformed strides.");
 
-    if (a.p->data.size() != a.p->num_el or b.p->data.size() != b.p->num_el)
-      throw std::logic_error("Malformed num_el or data.");
+    if (p->data.size() != p->num_el)
+      throw std::invalid_argument("Malformed num_el or data.");
   }
 
   Tensor Tensor::clone() const {
@@ -315,7 +315,7 @@ namespace NN {
   }
 
   Tensor Tensor::add(const Tensor &b) const {
-    validate_pair(*this, b);
+    validate(*this, b);
     auto r = binary_broadcast(*this, b, std::plus<>());
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
@@ -342,7 +342,7 @@ namespace NN {
 
   Tensor &Tensor::add_(const Tensor &b) {
     check_mutable();
-    validate_pair(*this, b);
+    validate(*this, b);
     if (b.p->requires_grad or b.p->grad_fn)
       throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
@@ -353,7 +353,7 @@ namespace NN {
   Tensor Tensor::sub(const dtype x) const { return add(-x); }
 
   Tensor Tensor::sub(const Tensor &b) const {
-    validate_pair(*this, b);
+    validate(*this, b);
     auto r = binary_broadcast(*this, b, std::minus<>());
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
@@ -376,7 +376,7 @@ namespace NN {
 
   Tensor &Tensor::sub_(const Tensor &b) {
     check_mutable();
-    validate_pair(*this, b);
+    validate(*this, b);
     if (b.p->requires_grad or b.p->grad_fn)
       throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
@@ -385,7 +385,7 @@ namespace NN {
   }
 
   Tensor Tensor::mul(const Tensor &b) const {
-    validate_pair(*this, b);
+    validate(*this, b);
     auto r = binary_broadcast(*this, b, std::multiplies<>());
     if (p->requires_grad or b.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
@@ -427,7 +427,7 @@ namespace NN {
 
   Tensor &Tensor::mul_(const Tensor &b) {
     check_mutable();
-    validate_pair(*this, b);
+    validate(*this, b);
     if (b.p->requires_grad or b.p->grad_fn)
       throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
@@ -440,7 +440,7 @@ namespace NN {
   Tensor Tensor::matmul(const Tensor &a, const Tensor &b) { return a.h_matmul(b); }
 
   Tensor Tensor::h_matmul(const Tensor &b) const {
-    validate_pair(*this, b);
+    validate(*this, b);
     auto &shape = p->shape, &bshape = b.p->shape;
     if (shape.size() < 2 or bshape.size() < 2)
       throw std::domain_error("Cant matmul with a scalar.");

@@ -5,7 +5,7 @@
 
 namespace NN::Loss {
   dtype mse(const Tensor &pred, const Tensor &target) {
-    Tensor::validate_pair(pred, target);
+    Tensor::validate(pred, target);
     if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
 
@@ -20,7 +20,7 @@ namespace NN::Loss {
   }
 
   dtype bce(const Tensor &pred, const Tensor &target) {
-    Tensor::validate_pair(pred, target);
+    Tensor::validate(pred, target);
     if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
 
@@ -49,7 +49,7 @@ namespace NN::Loss {
   }
 
   dtype ce(const Tensor &pred, const Tensor &target, size_t dim) {
-    Tensor::validate_pair(pred, target);
+    Tensor::validate(pred, target);
     if (pred.p->shape != target.p->shape)
       throw std::invalid_argument("Incompatible shape.");
     if (dim >= pred.p->shape.size())

@@ -326,9 +326,18 @@ namespace NN {
     // Wrapper around Autograd::backward
     void backward() const;
 
-    // Throws unless both tensors have valid strides and consistent storage,
-    // and neither is empty. Does not compare shapes.
-    static void validate_pair(const Tensor &a, const Tensor &b);
+    // Validates the tensor's internal state.
+    //
+    // Throws `std::invalid_argument` if the tensor is empty, has invalid
+    // strides, or its storage is inconsistent with its element count.
+    void validate() const;
+
+    // Validates multiple tensors.
+    template <typename... Args>
+      requires(sizeof...(Args) > 1)
+    static void validate(const Args &...args) {
+      (args.validate(), ...);
+    }
 
     // Returns the sole element of the tensor.
     //

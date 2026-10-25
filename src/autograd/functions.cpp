@@ -12,7 +12,7 @@ namespace NN::Autograd {
   Tensor sum_to_shape(const Tensor &g, const std::vector<size_t> &shape) {
     const auto &gs = g.p->shape;
     if (gs == shape)
-      return g;
+      return g.clone();
 
     const size_t n = gs.size();
     if (shape.size() > n)
