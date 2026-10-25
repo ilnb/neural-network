@@ -5,6 +5,7 @@ add_library(neural
   src/tensor/tensor.cpp
   src/nn/activations.cpp
   src/nn/loss.cpp
+  src/autograd/functions.cpp
 )
 
 target_compile_features(neural PUBLIC cxx_std_23)

@@ -1,12 +1,17 @@
 #include "tensor/tensor.hpp"
+#include "autograd/functions.hpp"
+#include "autograd/grad_fn.hpp"
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
 namespace NN {
+  using namespace Autograd;
+
   bool Tensor::valid_strides() const {
     const auto &strides = p->strides;
     const auto &shape = p->shape;
@@ -42,9 +47,9 @@ namespace NN {
   }
 
   void Tensor::assign_shape(std::vector<size_t> &&dims, const bool clear) {
-    const size_t n = checked_num_el(dims);
     if (!p)
       p = std::make_shared<Impl>();
+    const size_t n = checked_num_el(dims);
     p->shape = std::move(dims);
     finalize_shape(n, clear);
   }
@@ -74,7 +79,8 @@ namespace NN {
   }
 
   Tensor &Tensor::set_data(std::vector<dtype> &&v) {
-    check_mutable();
+    if (not empty())
+      check_mutable();
     if (v.size() != checked_num_el(p->shape))
       throw std::invalid_argument("Data vectors are of different size.");
     p->data = std::move(v);
@@ -83,7 +89,8 @@ namespace NN {
   }
 
   Tensor &Tensor::set_dims(std::vector<size_t> &&v, const bool clear) {
-    check_mutable();
+    if (not empty())
+      check_mutable();
     assign_shape(std::move(v), clear);
     return *this;
   }
@@ -202,21 +209,21 @@ namespace NN {
 
   bool Tensor::empty() const { return !p; }
 
+  void Tensor::backward() const { Autograd::backward(*this); }
+
   void Tensor::set_requires_grad(const bool x) {
     if (empty())
       throw std::invalid_argument("Empty tensor.");
     if (p->grad_fn)
       throw std::logic_error("requires_grad can only be changed on a leaf tensor.");
     p->requires_grad = x;
-    if (!x)
-      p.reset();
   }
 
   void Tensor::check_mutable() const {
     if (empty())
       throw std::invalid_argument("Empty tensor.");
-    if ((p->requires_grad || p->grad_fn))
-      throw std::logic_error("In-place op on a tensor that requires grad.");
+    if ((p->requires_grad or p->grad_fn))
+      throw std::logic_error("In-place op involving autograd tensor.");
   }
 
   void Tensor::validate_pair(const Tensor &a, const Tensor &b) {
@@ -230,30 +237,42 @@ namespace NN {
       throw std::logic_error("Malformed num_el or data.");
   }
 
-  Tensor Tensor::clone() const { return Tensor(p->shape); }
-
-  dtype Tensor::sum() const {
+  Tensor Tensor::clone() const {
     if (empty())
-      return 0;
-    return std::ranges::fold_left(p->data, 0, [](dtype s, dtype x) { return s + x; });
+      throw std::invalid_argument("Empty tensor.");
+    auto r = Tensor(p->shape);
+    r.set_data(p->data);
+    return r;
   }
 
-  dtype Tensor::mean() const {
+  dtype Tensor::item() const {
+    if (empty() or p->num_el != 1)
+      throw std::domain_error("Tensor must contain exactly one element.");
+    return p->data[0];
+  }
+
+  Tensor Tensor::sum() const {
     if (empty())
-      return 0;
+      throw std::domain_error("Empty tensor.");
+    return Tensor(std::ranges::fold_left(p->data, 0, [](dtype s, dtype x) { return s + x; }));
+  }
+
+  Tensor Tensor::mean() const {
+    if (empty())
+      throw std::domain_error("Empty tensor.");
     return sum() / p->num_el;
   }
 
-  dtype Tensor::min() const {
+  Tensor Tensor::min() const {
     if (empty())
-      throw std::domain_error("Cant find minimum of empty tensor.");
-    return *std::ranges::min_element(p->data);
+      throw std::domain_error("Empty tensor.");
+    return Tensor(*std::ranges::min_element(p->data));
   }
 
-  dtype Tensor::max() const {
+  Tensor Tensor::max() const {
     if (empty())
-      throw std::domain_error("Cant find maximum of empty tensor.");
-    return *std::ranges::max_element(p->data);
+      throw std::domain_error("Empty tensor.");
+    return Tensor(*std::ranges::max_element(p->data));
   }
 
   Tensor Tensor::sum(size_t dim) const { return h_reduce(dim, 0.0f, std::plus<>()); }
@@ -282,12 +301,35 @@ namespace NN {
   Tensor Tensor::add(const dtype x) const {
     auto r = clone();
     std::ranges::for_each(r.p->data, [x](dtype &v) { v += x; });
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, dz);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
     return r;
   }
 
   Tensor Tensor::add(const Tensor &b) const {
     validate_pair(*this, b);
-    return binary_broadcast(*this, b, std::plus<>());
+    auto r = binary_broadcast(*this, b, std::plus<>());
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+      fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, sum_to_shape(dz, ap->shape));
+        if (bp->requires_grad)
+          accumulate(*bp, sum_to_shape(dz, bp->shape));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::add(const Tensor &a, const Tensor &b) { return a.add(b); }
@@ -301,35 +343,42 @@ namespace NN {
   Tensor &Tensor::add_(const Tensor &b) {
     check_mutable();
     validate_pair(*this, b);
+    if (b.p->requires_grad or b.p->grad_fn)
+      throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::plus<>());
   }
 
-  Tensor Tensor::sub(const dtype x) const {
-    if (empty())
-      throw std::invalid_argument("Empty tensor.");
-    auto r = clone();
-    std::ranges::for_each(r.p->data, [x](dtype &v) { v -= x; });
-    return r;
-  }
+  Tensor Tensor::sub(const dtype x) const { return add(-x); }
 
   Tensor Tensor::sub(const Tensor &b) const {
     validate_pair(*this, b);
-    return binary_broadcast(*this, b, std::minus<>());
+    auto r = binary_broadcast(*this, b, std::minus<>());
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+      fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, sum_to_shape(dz, ap->shape));
+        if (bp->requires_grad)
+          accumulate(*bp, sum_to_shape(-dz, bp->shape));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::sub(const Tensor &a, const Tensor &b) { return a.sub(b); }
 
-  Tensor &Tensor::sub_(const dtype x) {
-    check_mutable();
-    std::ranges::for_each(p->data, [x](dtype &v) { v -= x; });
-    return *this;
-  }
+  Tensor &Tensor::sub_(const dtype x) { return add_(-x); }
 
   Tensor &Tensor::sub_(const Tensor &b) {
     check_mutable();
     validate_pair(*this, b);
+    if (b.p->requires_grad or b.p->grad_fn)
+      throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::minus<>());
@@ -337,9 +386,20 @@ namespace NN {
 
   Tensor Tensor::mul(const Tensor &b) const {
     validate_pair(*this, b);
-    if (not broadcasts_into(p->shape, b.p->shape))
-      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
-    return binary_broadcast(*this, b, std::multiplies<>());
+    auto r = binary_broadcast(*this, b, std::multiplies<>());
+    if (p->requires_grad or b.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p, b.p};
+      fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, sum_to_shape(binary_broadcast(dz, Tensor(bp), std::multiplies<>()), ap->shape));
+        if (bp->requires_grad)
+          accumulate(*bp, sum_to_shape(binary_broadcast(dz, Tensor(ap), std::multiplies<>()), bp->shape));
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::mul(const dtype x) const {
@@ -347,6 +407,13 @@ namespace NN {
       throw std::invalid_argument("Empty tensor.");
     auto r = clone();
     std::ranges::for_each(r.p->data, [x](dtype &v) { v *= x; });
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, x](const Tensor &dz) { accumulate(*ap, dz * x); };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
     return r;
   }
 
@@ -361,6 +428,8 @@ namespace NN {
   Tensor &Tensor::mul_(const Tensor &b) {
     check_mutable();
     validate_pair(*this, b);
+    if (b.p->requires_grad or b.p->grad_fn)
+      throw std::logic_error("In-place op involving autograd tensor.");
     if (not broadcasts_into(p->shape, b.p->shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return binary_inplace(b, std::multiplies<>());
@@ -373,7 +442,7 @@ namespace NN {
   Tensor Tensor::h_matmul(const Tensor &b) const {
     validate_pair(*this, b);
     auto &shape = p->shape, &bshape = b.p->shape;
-    if (p->shape.size() < 2 or bshape.size() < 2)
+    if (shape.size() < 2 or bshape.size() < 2)
       throw std::domain_error("Cant matmul with a scalar.");
 
     const size_t arank = shape.size(), brank = bshape.size();
@@ -397,14 +466,18 @@ namespace NN {
     auto &strides = p->strides, &bstrides = b.p->strides;
     auto a_bs = std::span<const size_t>(strides).first(br);
     auto b_bs = std::span<const size_t>(bstrides).first(br);
-    if (not std::ranges::equal(a_shape, batch)) {
+    if (a_pad == 0 and std::ranges::equal(a_shape, batch)) {
+      a_bs = std::span<const size_t>(strides).first(br);
+    } else {
       a_scratch.assign(br, 0);
       for (size_t i = 0; i < a_shape.size(); i++)
         if (a_shape[i] != 1)
           a_scratch[a_pad + i] = strides[i];
       a_bs = a_scratch;
     }
-    if (not std::ranges::equal(b_shape, batch)) {
+    if (b_pad == 0 and std::ranges::equal(b_shape, batch)) {
+      b_bs = std::span<const size_t>(bstrides).first(br);
+    } else {
       b_scratch.assign(br, 0);
       for (size_t i = 0; i < b_shape.size(); i++)
         if (b_shape[i] != 1)
@@ -450,9 +523,19 @@ namespace NN {
   }
 
   Tensor Tensor::operator-() const {
-    auto c = clone();
-    std::ranges::for_each(c.p->data, [](dtype &x) { x = -x; });
-    return c;
+    auto r = clone();
+    std::ranges::for_each(r.p->data, [](dtype &x) { x = -x; });
+    if (p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, -dz);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor Tensor::operator+(const dtype x) const { return add(x); }
@@ -468,9 +551,21 @@ namespace NN {
   Tensor Tensor::operator-(const dtype x) const { return sub(x); }
 
   Tensor operator-(const dtype x, const Tensor &a) {
-    auto c = -a;
-    c.add(x);
-    return c;
+    Tensor r(a.p->shape);
+    auto &rdata = r.p->data, &data = a.p->data;
+    for (size_t i = 0, n = a.p->num_el; i < n; i++)
+      rdata[i] = x - data[i];
+    if (a.p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {a.p};
+      fn->backward = [ap = a.p](const Tensor &dz) {
+        if (ap->requires_grad)
+          accumulate(*ap, -dz);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
   }
 
   Tensor &Tensor::operator-=(const dtype x) { return sub_(x); }

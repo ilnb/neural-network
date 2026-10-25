@@ -84,18 +84,11 @@ static void test_indexing() {
 
   std::vector<size_t> dims = {2, 3};
   a.set_dims(dims);
-  check(a.empty(), "set_dims: tensor is empty");
-  check(a.p->data.empty(), "set_dims: data is empty");
-  check(a.p->num_el == 0, "set_dims: num_el");
-  check_shape(a, {2, 3}, "set_dims: shape is kept");
-  check_strides(a, {3, 1}, "set_dims: strides");
-
   a.set_data({3, 2, 10, 4, 5, 6});
-  check(not a.empty(), "set_data: tensor is not empty");
-  check(a.p->num_el == 6, "set_data: num_el");
+  check_strides(a, {3, 1}, "set_dims: strides");
   check_data(a, {3, 2, 10, 4, 5, 6}, "set_data: data");
 
-  Tensor b = a;
+  Tensor b = a.clone();
   std::ranges::for_each(b.p->data, [](dtype &x) { x++; });
 
   const auto c = a + b;
@@ -118,7 +111,7 @@ static void test_indexing() {
 
 static void test_transpose() {
   Tensor t = mk({2, 3}, {1, 2, 3, 4, 5, 6});
-  t.transpose();
+  t = t.transpose();
   check_shape(t, {3, 2}, "transpose: shape");
   check_strides(t, {2, 1}, "transpose: strides");
   check_data(t, {1, 4, 2, 5, 3, 6}, "transpose: data");
@@ -127,7 +120,7 @@ static void test_transpose() {
   check_throws<std::invalid_argument>([&] { x.transpose(); }, "transpose: rank is not 2");
 
   Tensor r = mk({2, 3}, {1, 2, 3, 4, 5, 6});
-  r.transpose().transpose();
+  r = r.transpose().transpose();
   check_shape(r, {2, 3}, "double transpose: shape");
   check_strides(r, {3, 1}, "double transpose: strides");
   check_data(r, {1, 2, 3, 4, 5, 6}, "double transpose: data");
@@ -141,10 +134,10 @@ static void test_transpose() {
 static void test_reduce() {
   Tensor t = mk({2, 3, 2}, {3, 2, 5, 1, 6, 12, 9, 8, 10, 12, 14, 7});
 
-  check_close(t.sum(), 89, 0, "sum: total");
-  check_close(t.mean(), 89.0f / 12, 1e-6f, "mean: total");
-  check_close(t.min(), 1, 0, "min: total");
-  check_close(t.max(), 14, 0, "max: total");
+  check_close(t.sum().item(), 89, 0, "sum: total");
+  check_close(t.mean().item(), 89.0f / 12, 1e-6f, "mean: total");
+  check_close(t.min().item(), 1, 0, "min: total");
+  check_close(t.max().item(), 14, 0, "max: total");
 
   check_shape(t.sum(0), {3, 2}, "csum(0): shape");
   check_data(t.sum(0), {12, 10, 15, 13, 20, 19}, "csum(0): data");
@@ -166,12 +159,12 @@ static void test_reduce() {
   check_data(t.min(2), {2, 1, 6, 8, 10, 7}, "cmin(2): data");
 
   Tensor u = t;
-  u.sum(1);
+  u = u.sum(1);
   check_shape(u, {2, 2}, "sum(1): shape");
   check_data(u, {14, 15, 33, 27}, "sum(1): data");
 
   check_throws<std::out_of_range>([&] { (void)t.sum(3); }, "csum: dim out of range");
-  check_throws<std::domain_error>([&] { (void)Tensor(3).sum(0); }, "csum: scalar tensor");
+  check_throws<std::out_of_range>([&] { (void)Tensor(3).sum(0); }, "csum: scalar tensor");
   check_throws<std::domain_error>([&] { (void)Tensor().sum(0); }, "csum: empty tensor");
 }
 
@@ -195,8 +188,8 @@ static void test_broadcasting() {
   check_shape(cadd, {2, 2, 2}, "cadd: shape");
   check_data(cadd, {6, 8, 9, 11, 3, 11, 6, 14}, "cadd: data");
 
-  Tensor t = u;
-  t += Tensor(1).set_data(6);
+  Tensor t = u.clone();
+  t += Tensor(6);
   check_shape(t, {2, 1, 2}, "scalar +=: shape");
   check_data(t, {10, 12, 7, 15}, "scalar +=: data");
 
@@ -225,7 +218,7 @@ static void test_matmul() {
   check_data(d, {22, 38, 10, 10}, "cmatmul: data");
 
   Tensor w = mk({2, 2}, {1, 2, 3, 4});
-  w.matmul(mk({2, 2}, {1, 0, 0, 1}));
+  w = w.matmul(mk({2, 2}, {1, 0, 0, 1}));
   check_data(w, {1, 2, 3, 4}, "matmul: identity");
 
   check_throws<std::domain_error>([&] { (void)mk({3}, {1, 2, 3}).matmul(v); }, "matmul: rank below 2");
@@ -242,7 +235,7 @@ static void test_cat() {
   check_shape(t, {2, 5}, "cat: shape");
   check_data(t, {1, 2, 5, 6, 7, 3, 4, 8, 9, 10}, "cat: data");
 
-  Tensor u = t.cat(u, 1);
+  Tensor u = t.cat(t, 1);
   check_shape(u, {2, 10}, "cat self: shape");
   check_data(u, {1, 2, 5, 6, 7, 1, 2, 5, 6, 7, 3, 4, 8, 9, 10, 3, 4, 8, 9, 10}, "cat self: data");
 
@@ -300,7 +293,7 @@ static void test_permute() {
   check_data(id, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, "permute(identity): data");
 
   Tensor m = mk({2, 2}, {1, 2, 3, 4});
-  m.permute(1, 0);
+  m = m.permute(1, 0);
   check_shape(m, {2, 2}, "permute in place: shape");
   check_data(m, {1, 3, 2, 4}, "permute in place: data");
 

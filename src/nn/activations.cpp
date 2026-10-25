@@ -27,10 +27,10 @@ namespace NN::Act {
       throw std::out_of_range("dim is out of bounds.");
 
     Tensor r;
+    r.set_dims(x.p->shape, false);
     const auto &sh = r.p->shape, &st = r.p->strides;
     auto &dt = r.p->data;
     const auto &xdt = x.p->data;
-    r.set_dims(x.p->shape, false);
     const size_t n = sh.size(), d = sh[dim], sd = st[dim];
     const size_t outer = r.p->num_el / d;
 
@@ -65,10 +65,10 @@ namespace NN::Act {
       throw std::out_of_range("dim out of bounds.");
 
     Tensor r;
+    r.set_dims(x.p->shape, false);
     const auto &sh = r.p->shape, &st = r.p->strides;
     auto &dt = r.p->data;
     const auto &xdt = x.p->data;
-    r.set_dims(x.p->shape, false);
     const size_t n = sh.size(), d = sh[dim], sd = st[dim];
     const size_t outer = r.p->num_el / d;
 

@@ -140,7 +140,8 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, dtype> and std::ranges::sized_range<R>
     Tensor &set_data(R &&r) {
-      check_mutable();
+      if (not empty())
+        check_mutable();
       if (std::ranges::size(r) != checked_num_el(p->shape))
         throw std::invalid_argument("Data ranges are of different size.");
       p->data.assign_range(r);
@@ -168,6 +169,8 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
     Tensor &set_dims(R &&r, const bool clear = true) {
+      if (not empty())
+        check_mutable();
       assign_shape(std::forward<R>(r), clear);
       return *this;
     }
@@ -320,6 +323,9 @@ namespace NN {
     // Safe to mutate without affecting the source.
     Tensor clone() const;
 
+    // Wrapper around Autograd::backward
+    void backward() const;
+
     // Throws unless both tensors have valid strides and consistent storage,
     // and neither is empty. Does not compare shapes.
     static void validate_pair(const Tensor &a, const Tensor &b);
@@ -330,18 +336,25 @@ namespace NN {
     // contain exactly one element.
     dtype item() const;
 
-    // Mean of all elements. Returns 0 for an empty tensor.
-    dtype mean() const;
+    // Sum of all elements.
+    //
+    // Throws `std::domain_error` for an empty tensor.
+    Tensor sum() const;
+
+    // Mean of all elements.
+    //
+    // Throws `std::domain_error` for an empty tensor.
+    Tensor mean() const;
 
     // Largest element.
     //
     // Throws `std::domain_error` for an empty tensor.
-    dtype max() const;
+    Tensor max() const;
 
     // Smallest element.
     //
     // Throws `std::domain_error` for an empty tensor.
-    dtype min() const;
+    Tensor min() const;
 
     // Reduces axis `dim` in-place. The axis is removed,
     // so the rank decreases by one.
@@ -407,13 +420,22 @@ namespace NN {
     // In-place multiplies scalar `x` to the tensor.
     Tensor &mul_(const dtype x);
 
-    // In-place element-wise add with full broadcasting.
+    // In-place element-wise add with broadcasting.
+    // `b` must broadcast into `this` without changing its shape.
+    //
+    // Throws `std::logic_error` if either tensor participates in autograd.
     Tensor &add_(const Tensor &b);
 
-    // In-place element-wise subtract with full broadcasting.
+    // In-place element-wise sub with broadcasting.
+    // `b` must broadcast into `this` without changing its shape.
+    //
+    // Throws `std::logic_error` if either tensor participates in autograd.
     Tensor &sub_(const Tensor &b);
 
-    // In-place element-wise multiply with full broadcasting.
+    // In-place element-wise multiply with broadcasting.
+    // `b` must broadcast into `this` without changing its shape.
+    //
+    // Throws `std::logic_error` if either tensor participates in autograd.
     Tensor &mul_(const Tensor &b);
 
     // Returns `a + b` as a new tensor with full broadcasting.
@@ -492,6 +514,8 @@ namespace NN {
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::integral<std::ranges::range_value_t<R>>
     void assign_shape(R &&dims, const bool clear) {
+      if (!p)
+        p = std::make_shared<Impl>();
       const size_t n = checked_num_el(dims);
       p->shape.assign_range(dims);
       finalize_shape(n, clear);
@@ -521,7 +545,7 @@ namespace NN {
       requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
     Tensor h_reduce(size_t dim, dtype init, Op op) const {
       if (empty())
-        throw std::domain_error("Cant reduce an empty tensor.");
+        throw std::domain_error("Empty tensor.");
       const size_t n = p->shape.size();
       if (dim >= n)
         throw std::out_of_range("Out of bounds axis.");
@@ -532,7 +556,11 @@ namespace NN {
         if (i != dim)
           new_size.push_back(p->shape[i]);
 
-      Tensor ret(std::move(new_size));
+      Tensor ret;
+      if (new_size.empty())
+        ret = Tensor(init);
+      else
+        ret.set_dims(std::move(new_size), false);
       for (size_t out = 0; out < ret.p->num_el; out++) {
         size_t offset = 0, tmp = out;
 
