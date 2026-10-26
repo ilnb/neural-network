@@ -1,6 +1,7 @@
 #include "nn/activations.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
+#include "autograd/grad_mode.hpp"
 #include "tensor/detail.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
@@ -18,7 +19,7 @@ namespace NN::Act {
 
   Tensor relu(const Tensor &x) {
     auto r = Detail::relu(x);
-    if (x.p->requires_grad) {
+    if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
       fn->backward = [ap = x.p](const Tensor &dz) {
@@ -40,7 +41,7 @@ namespace NN::Act {
 
   Tensor sigmoid(const Tensor &x) {
     auto r = Detail::sigmoid(x);
-    if (x.p->requires_grad) {
+    if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
       std::weak_ptr<Impl> wr = r.p;
@@ -65,7 +66,7 @@ namespace NN::Act {
 
   Tensor softmax(const Tensor &x, size_t dim) {
     auto r = Detail::softmax(x, dim);
-    if (x.p->requires_grad) {
+    if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
       std::weak_ptr<Impl> wr = r.p;
@@ -96,7 +97,7 @@ namespace NN::Act {
   Tensor log_softmax(const Tensor &x, size_t dim) {
     auto r = Detail::log_softmax(x, dim);
 
-    if (x.p->requires_grad) {
+    if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
 

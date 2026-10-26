@@ -1,6 +1,7 @@
 #include "nn/loss.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
+#include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
 #include <cmath>
 #include <limits>
@@ -11,7 +12,7 @@ namespace NN::Loss {
   Tensor mse(const Tensor &pred, const Tensor &target) {
     auto r = Detail::mse(pred, target);
 
-    if (pred.p->requires_grad or target.p->requires_grad) {
+    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {pred.p, target.p};
 
@@ -41,7 +42,7 @@ namespace NN::Loss {
 
   Tensor bce(const Tensor &pred, const Tensor &target) {
     auto r = Detail::bce(pred, target);
-    if (pred.p->requires_grad or target.p->requires_grad) {
+    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {pred.p, target.p};
 
@@ -78,7 +79,7 @@ namespace NN::Loss {
   Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
     auto r = Detail::ce(pred, target, dim);
 
-    if (pred.p->requires_grad or target.p->requires_grad) {
+    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {pred.p, target.p};
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {

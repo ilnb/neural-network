@@ -1,5 +1,6 @@
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
+#include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
 #include <functional>
 #include <memory>
@@ -71,6 +72,8 @@ namespace NN::Autograd {
     if (root.p->num_el != 1)
       throw std::invalid_argument("backward requires a scalar root.");
 
+    NoGradGuard g; // closure must not record
+
     std::vector<Impl *> order;
     std::unordered_set<Impl *> seen;
     std::function<void(Impl *)> visit = [&](Impl *p) {
@@ -97,5 +100,7 @@ namespace NN::Autograd {
       }
       v->grad.reset();
     }
+    for (auto v : order)
+      v->grad_fn.reset();
   }
 } // namespace NN::Autograd

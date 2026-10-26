@@ -1,6 +1,7 @@
 #include "tensor/tensor.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
+#include "autograd/grad_mode.hpp"
 #include "tensor/detail.hpp"
 #include <algorithm>
 #include <functional>
@@ -40,7 +41,7 @@ namespace NN {
 
   Tensor Tensor::reshape(std::vector<size_t> &&v) const {
     auto r = Detail::reshape(*this, std::move(v));
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p](const Tensor &dz) {
@@ -55,7 +56,7 @@ namespace NN {
 
   Tensor Tensor::transpose() const {
     auto r = Detail::transpose(*this);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p](const Tensor &dz) {
@@ -71,7 +72,7 @@ namespace NN {
   Tensor Tensor::cat(const Tensor &b, size_t dim) const {
     auto r = Detail::cat(*this, b, dim);
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
 
@@ -112,7 +113,7 @@ namespace NN {
   Tensor Tensor::stack(const Tensor &b, size_t dim) const {
     auto r = Detail::stack(*this, b, dim);
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
 
@@ -151,7 +152,7 @@ namespace NN {
   Tensor Tensor::permute(std::vector<size_t> &&v) const {
     auto r = Detail::permute(*this, v);
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       // inverse permutation
       const size_t n = p->shape.size();
       for (size_t i = 0; i < n; i++) {
@@ -198,7 +199,7 @@ namespace NN {
   void Tensor::check_mutable() const {
     if (empty())
       throw std::invalid_argument("Empty tensor.");
-    if ((p->requires_grad or p->grad_fn))
+    if (Autograd::grad_enabled and (p->requires_grad or p->grad_fn))
       throw std::logic_error("In-place op involving autograd tensor.");
   }
 
@@ -229,7 +230,7 @@ namespace NN {
 
   Tensor Tensor::sum() const {
     auto r = Detail::sum(*this);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p](const Tensor &dz) {
@@ -257,7 +258,7 @@ namespace NN {
 
     const auto idx = std::ranges::min_element(p->data) - p->data.begin();
     Tensor r(p->data[idx]);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, idx](const Tensor &dz) {
@@ -279,7 +280,7 @@ namespace NN {
 
     const auto idx = std::ranges::max_element(p->data) - p->data.begin();
     Tensor r(p->data[idx]);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, idx](const Tensor &dz) {
@@ -298,7 +299,7 @@ namespace NN {
   Tensor Tensor::expand(size_t dim, size_t size) const {
     auto r = Detail::expand(*this, dim, size);
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, dim](const Tensor &dz) {
@@ -314,7 +315,7 @@ namespace NN {
 
   Tensor Tensor::sum(size_t dim) const {
     auto r = Detail::sum(*this, dim);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, dim](const Tensor &dz) {
@@ -337,7 +338,7 @@ namespace NN {
     for (auto &x : r.p->data)
       x /= f;
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, dim](const Tensor &dz) {
@@ -358,7 +359,7 @@ namespace NN {
   Tensor Tensor::max(size_t dim) const {
     auto [r, idx] = Detail::cmp(*this, dim, std::greater<>());
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
@@ -394,7 +395,7 @@ namespace NN {
   Tensor Tensor::min(size_t dim) const {
     auto [r, idx] = Detail::cmp(*this, dim, std::less<>());
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
@@ -429,7 +430,7 @@ namespace NN {
 
   Tensor Tensor::add(const dtype x) const {
     auto r = Detail::add(*this, x);
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p](const Tensor &dz) {
@@ -446,7 +447,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::plus<>());
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -482,7 +483,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::minus<>());
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -513,7 +514,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::multiplies<>());
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -533,7 +534,7 @@ namespace NN {
       throw std::invalid_argument("Empty tensor.");
     auto r = Detail::mul(*this, x);
 
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, x](const Tensor &dz) { accumulate(*ap, dz * x); };
@@ -561,7 +562,7 @@ namespace NN {
   Tensor Tensor::matmul(const Tensor &b) const {
     auto r = Detail::matmul(*this, b);
 
-    if (p->requires_grad or b.p->requires_grad) {
+    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p, b.p};
 
@@ -583,7 +584,7 @@ namespace NN {
   Tensor Tensor::operator-() const {
     auto r = clone();
     std::ranges::for_each(r.p->data, [](dtype &x) { x = -x; });
-    if (p->requires_grad) {
+    if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p](const Tensor &dz) {
@@ -615,7 +616,7 @@ namespace NN {
     auto &rdata = r.p->data, &data = a.p->data;
     for (size_t i = 0, n = a.p->num_el; i < n; i++)
       rdata[i] = x - data[i];
-    if (a.p->requires_grad) {
+    if (Autograd::grad_enabled and a.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {a.p};
       fn->backward = [ap = a.p](const Tensor &dz) {
