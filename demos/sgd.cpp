@@ -2,6 +2,7 @@
 #include "autograd/grad_mode.hpp"
 #include "nn/linear.hpp"
 #include "nn/loss.hpp"
+#include "nn/sequential.hpp"
 #include "tensor/tensor.hpp"
 #include <print>
 
@@ -13,23 +14,26 @@ int main() {
     l.b.set_data(0.5);
   }
 
+  NN::Sequential model(std::move(l));
+  auto params = model.params();
+
   NN::Tensor x(1, 3), target(1, 1);
   x.set_data(2.0, 4.0, 1.0);
   target.set_data(4.0);
 
-  auto pred = l.forward(x);
+  auto pred = model.forward(x);
   auto loss = NN::Loss::mse(pred, target);
   loss.backward();
 
-  std::println("w.grad.data: {}", l.w.p->grad->p->data);
-  std::println("b.grad.data: {}", l.b.p->grad->p->data);
+  std::println("grad_w : {}", params[0].p->grad->p->data);
+  std::println("grad_b : {}", params[1].p->grad->p->data);
 
-  NN::Optim::SGD sgd(l.params(), 0.1);
+  NN::Optim::SGD sgd(model.params(), 0.1);
   sgd.step();
   sgd.zero_grad();
 
   std::println("updated weights:");
-  std::println("w: {}", l.w.p->data);
-  std::println("b: {}", l.b.p->data);
+  std::println("w : {}", params[0].p->data);
+  std::println("b : {}", params[1].p->data);
   return 0;
 }
