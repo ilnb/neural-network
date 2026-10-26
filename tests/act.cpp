@@ -24,10 +24,15 @@ static void check_close(dtype got, dtype want, dtype tol, const char *what) {
   }
 }
 
+static void check_data(const Tensor &t, std::initializer_list<dtype> want, const char *what) {
+  const std::vector<dtype> w(want);
+  check(t.p->data == w, what);
+}
+
 static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
   Tensor t;
   t.set_dims(std::move(shape), false);
-  t.set_data(std::move(vals));
+  t.set_data(vals);
   return t;
 }
 
@@ -262,6 +267,27 @@ static void test_log_softmax_errors() {
   check(threw, "log_softmax: an empty tensor throws invalid_argument");
 }
 
+static void test_results_do_not_alias_inputs() {
+  Tensor x = mk({2, 2}, {1, -1, 2, -2});
+
+  const auto rl = Act::relu(x);
+  check(rl.p != x.p, "relu: result is a fresh tensor");
+  check(rl.p->shape == x.p->shape, "relu: shape is preserved");
+
+  const auto sg = Act::sigmoid(x);
+  check(sg.p != x.p, "sigmoid: result is a fresh tensor");
+
+  const auto sm = Act::softmax(x, 1);
+  check(sm.p != x.p, "softmax: result is a fresh tensor");
+
+  const auto ls = Act::log_softmax(x, 1);
+  check(ls.p != x.p, "log_softmax: result is a fresh tensor");
+
+  Tensor y = mk({2, 2}, {1, -1, 2, -2});
+  rl.p->data[0] = 42;
+  check_data(y, {1, -1, 2, -2}, "relu: writing the result leaves the input alone");
+}
+
 int main() {
   test_relu();
   test_sigmoid();
@@ -277,6 +303,7 @@ int main() {
   test_log_softmax_stability();
   test_log_softmax_nan();
   test_log_softmax_errors();
+  test_results_do_not_alias_inputs();
 
   if (failures != 0) {
     std::println(stderr, "{} check(s) failed", failures);

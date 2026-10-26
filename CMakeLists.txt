@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(neural-net LANGUAGES CXX)
 
 add_library(neural
+  src/tensor/detail.cpp
   src/tensor/tensor.cpp
   src/nn/activations.cpp
   src/nn/loss.cpp
@@ -18,6 +19,8 @@ target_include_directories(neural
 add_executable(tensor_test tests/tensor.cpp)
 add_executable(act_test tests/act.cpp)
 add_executable(loss_test tests/loss.cpp)
+add_executable(autograd_test tests/autograd.cpp)
 target_link_libraries(tensor_test PRIVATE neural)
 target_link_libraries(act_test PRIVATE neural)
 target_link_libraries(loss_test PRIVATE neural)
+target_link_libraries(autograd_test PRIVATE neural)

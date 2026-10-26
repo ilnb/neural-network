@@ -1,7 +1,7 @@
 #include "nn/activations.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
-#include "nn/detail.hpp"
+#include "tensor/detail.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -43,8 +43,10 @@ namespace NN::Act {
     if (x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
-      fn->backward = [ap = x.p, ar = r.p](const Tensor &dz) {
-        if (!ap->requires_grad)
+      std::weak_ptr<Impl> wr = r.p;
+      fn->backward = [ap = x.p, wr](const Tensor &dz) {
+        auto ar = wr.lock();
+        if (!ap->requires_grad or !ar)
           return;
         Tensor dx(ap->shape);
         auto &xdata = dx.p->data, &zdata = dz.p->data;
@@ -66,12 +68,23 @@ namespace NN::Act {
     if (x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
-      fn->backward = [ap = x.p, ar = r.p, dim](const Tensor &dz) {
-        if (!ap->requires_grad)
+      std::weak_ptr<Impl> wr = r.p;
+      fn->backward = [ap = x.p, wr, dim](const Tensor &dz) {
+        auto ar = wr.lock();
+        if (!ap->requires_grad or !ar)
           return;
+        if (ap->shape.empty()) {
+          Autograd::accumulate(*ap, Tensor(0));
+          return;
+        }
         Tensor y(ar);
-        auto tmp = dz * y;
-        auto dx = y * (dz - tmp.sum(dim).expand(dim, ap->shape[dim]));
+        auto s = NN::Detail::sum(NN::Detail::binary_broadcast(dz, y, std::multiplies<>()), dim);
+        auto ex = NN::Detail::expand(s, dim, ap->shape[dim]);
+        Tensor dx(ap->shape);
+        auto &xdata = dx.p->data, &zdata = dz.p->data;
+        const auto &ydata = ar->data, &sdata = ex.p->data;
+        for (size_t i = 0, n = ap->num_el; i < n; i++)
+          xdata[i] = ydata[i] * (zdata[i] - sdata[i]);
         Autograd::accumulate(*ap, dx);
       };
       r.p->grad_fn = fn;
@@ -87,11 +100,17 @@ namespace NN::Act {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = {x.p};
 
-      fn->backward = [ap = x.p, ar = r.p, dim](const Tensor &dz) {
-        if (!ap->requires_grad)
+      std::weak_ptr<Impl> wr = r.p;
+      fn->backward = [ap = x.p, wr, dim](const Tensor &dz) {
+        auto ar = wr.lock();
+        if (!ap->requires_grad or !ar)
           return;
+        if (ap->shape.empty()) {
+          Autograd::accumulate(*ap, Tensor(0));
+          return;
+        }
         Tensor y(ar);
-        Tensor s = dz.h_sum(dim).expand(dim, ap->shape[dim]);
+        Tensor s = NN::Detail::expand(NN::Detail::sum(dz, dim), dim, ap->shape[dim]);
         Tensor dx(ap->shape);
         auto &xdata = dx.p->data, &zdata = dz.p->data;
         auto &ydata = ar->data, &sdata = s.p->data;
@@ -111,18 +130,25 @@ namespace NN::Act {
     Tensor relu(const Tensor &x) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
-      return Tensor(NN::Detail::map(x, [](dtype v) { return v > 0 ? v : 0; }));
+      return Tensor(map(x, [](dtype v) { return v > 0 or std::isnan(v) ? v : 0; }));
     }
 
     Tensor sigmoid(const Tensor &x) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
-      return Tensor(NN::Detail::map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
+      return Tensor(map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
     }
 
     Tensor softmax(const Tensor &x, size_t dim) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
+      if (x.p->shape.empty()) {
+        if (dim != 0)
+          throw std::out_of_range("dim is out of bounds.");
+        const dtype v = x.p->data[0];
+        const dtype e = std::exp(v - v); // to preserve NaN and inf poisons
+        return Tensor(e / e);
+      }
       if (dim >= x.p->shape.size())
         throw std::out_of_range("dim is out of bounds.");
 
@@ -161,6 +187,12 @@ namespace NN::Act {
     Tensor log_softmax(const Tensor &x, size_t dim) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
+      if (x.p->shape.empty()) {
+        if (dim != 0)
+          throw std::out_of_range("dim is out of bounds.");
+        const dtype v = x.p->data[0];
+        return Tensor(v - v);
+      }
       if (dim >= x.p->shape.size())
         throw std::out_of_range("dim out of bounds.");
 

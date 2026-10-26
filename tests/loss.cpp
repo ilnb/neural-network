@@ -1,5 +1,6 @@
 #include "nn/loss.hpp"
 #include <cmath>
+#include <limits>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -26,8 +27,21 @@ static void check_close(dtype got, dtype want, dtype tol, const char *what) {
 static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
   Tensor t;
   t.set_dims(std::move(shape), false);
-  t.set_data(std::move(vals));
+  t.set_data(vals);
   return t;
+}
+
+template <typename Ex, typename F>
+static void check_throws(F f, const char *what) {
+  try {
+    f();
+    std::println(stderr, "FAIL: {} (no exception)", what);
+    failures++;
+  } catch (const Ex &) {
+  } catch (const std::exception &e) {
+    std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
+    failures++;
+  }
 }
 
 static void test_mse() {
@@ -89,6 +103,31 @@ static void test_ce_edges() {
   check_close(Loss::ce(mk({1, 2}, {0, 1}), mk({1, 2}, {0, 1}), 1).item(), 0, 0, "ce: p=0 with y=0 is ignored");
 }
 
+static void test_validation_order() {
+  // An `inf` result must not hide malformed entries that follow it.
+  check_throws<std::invalid_argument>(
+      [&] { (void)Loss::bce(mk({2}, {0, 0.5f}), mk({2}, {1, 0.3f})); },
+      "bce: inf must not hide a later malformed target");
+
+  check_throws<std::invalid_argument>(
+      [&] { (void)Loss::ce(mk({1, 2}, {0, 0.5f}), mk({1, 2}, {1, 1.3f}), 1); },
+      "ce: inf must not hide a later malformed target");
+
+  // Probabilities are validated even where the target mass is zero.
+  check_throws<std::invalid_argument>(
+      [&] { (void)Loss::ce(mk({1, 2}, {-0.5f, 1.5f}), mk({1, 2}, {0, 1}), 1); },
+      "ce: validates probabilities on zero-target entries");
+
+  // bce needs p in [0, 1] because it takes log(p) and log(1 - p).
+  check_throws<std::invalid_argument>(
+      [&] { (void)Loss::bce(mk({2}, {-0.5f, 1.5f}), mk({2}, {0, 1})); },
+      "bce: probabilities outside [0, 1] throw");
+
+  // ...but NaN must still propagate rather than throw.
+  check(std::isnan(Loss::bce(mk({1}, {std::numeric_limits<dtype>::quiet_NaN()}), mk({1}, {1})).item()),
+        "bce: NaN prediction propagates");
+}
+
 static void test_errors() {
   bool threw = false;
   try {
@@ -139,6 +178,20 @@ static void test_errors() {
   check(threw, "mse: shape mismatch throws invalid_argument");
 }
 
+static void test_scalar_results() {
+  const auto mse = Loss::mse(mk({2, 2}, {1, 2, 3, 4}), mk({2, 2}, {1, 2, 3, 5}));
+  check(mse.p->shape.empty(), "mse: result is rank 0");
+  check(mse.p->num_el == 1, "mse: result has one element");
+
+  const auto bce = Loss::bce(mk({2}, {0.7f, 0.1f}), mk({2}, {1, 0}));
+  check(bce.p->shape.empty(), "bce: result is rank 0");
+  check(bce.p->num_el == 1, "bce: result has one element");
+
+  const auto ce = Loss::ce(mk({1, 2}, {0.3f, 0.7f}), mk({1, 2}, {0, 1}), 1);
+  check(ce.p->shape.empty(), "ce: result is rank 0");
+  check(ce.p->num_el == 1, "ce: result has one element");
+}
+
 int main() {
   test_mse();
   test_bce_values();
@@ -150,6 +203,8 @@ int main() {
   test_ce_binary_matches_bce();
   test_ce_edges();
   test_errors();
+  test_validation_order();
+  test_scalar_results();
 
   if (failures != 0) {
     std::println(stderr, "{} check(s) failed", failures);

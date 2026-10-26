@@ -1,5 +1,6 @@
 #include "tensor/tensor.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <initializer_list>
 #include <print>
@@ -71,8 +72,13 @@ static void check_throws(F f, const char *what) {
 static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
   Tensor t;
   t.set_dims(std::move(shape), false);
-  t.set_data(std::move(vals));
+  t.set_data(vals);
   return t;
+}
+
+// Compares shape and values against another tensor.
+static void check_same(const Tensor &got, const Tensor &want, const char *what) {
+  check(got.p->shape == want.p->shape and got.p->data == want.p->data, what);
 }
 
 static void test_indexing() {
@@ -84,7 +90,7 @@ static void test_indexing() {
 
   std::vector<size_t> dims = {2, 3};
   a.set_dims(dims);
-  a.set_data({3, 2, 10, 4, 5, 6});
+  a.set_data(3, 2, 10, 4, 5, 6);
   check_strides(a, {3, 1}, "set_dims: strides");
   check_data(a, {3, 2, 10, 4, 5, 6}, "set_data: data");
 
@@ -95,8 +101,8 @@ static void test_indexing() {
   check_shape(c, {2, 3}, "a+b: shape");
   check_data(c, {7, 5, 21, 9, 11, 13}, "a+b: data");
 
-  const auto d = Tensor::mul(c, a);
-  check_data(d, {21, 10, 210, 36, 55, 78}, "Tensor::mul(c,a): data");
+  const auto d = NN::Raw::mul(c, a);
+  check_data(d, {21, 10, 210, 36, 55, 78}, "Raw::mul(c,a): data");
   check_data(a.add(b).mul(a), {21, 10, 210, 36, 55, 78}, "cadd/mul chain: data");
 
   check(a.at(1, 2) == 6, "at: read");
@@ -107,6 +113,12 @@ static void test_indexing() {
 
   check_throws<std::out_of_range>([&] { (void)a.at(2, 0); }, "at: index out of bounds");
   check_throws<std::invalid_argument>([&] { (void)a.at(1); }, "at: wrong number of indices");
+
+  check(a.at({1, 2}) == 7, "at(initializer_list): read");
+  const Tensor &ca = a;
+  check(ca.at(0, 0) == 3, "at const: read");
+  check_throws<std::invalid_argument>([&] { (void)Tensor().at(0); }, "at: empty tensor");
+  check_throws<std::invalid_argument>([&] { (void)Tensor()[size_t{0}]; }, "operator[]: empty tensor");
 }
 
 static void test_transpose() {
@@ -206,7 +218,7 @@ static void test_matmul() {
   Tensor u = mk({1, 2, 1, 2}, {1, 2, 3, 4});
   Tensor v = mk({2, 2, 2, 1}, {8, 7, 6, 5, 4, 3, 2, 1});
 
-  const auto c = Tensor::matmul(u, v);
+  const auto c = NN::Raw::matmul(u, v);
   check_shape(c, {2, 2, 1, 1}, "matmul: shape");
   check_data(c, {22, 38, 10, 10}, "matmul: data");
 
@@ -298,15 +310,127 @@ static void test_permute() {
   check_throws<std::invalid_argument>([&] { (void)t.permute(0, 1); }, "permute: wrong size");
 }
 
+static void test_constructors() {
+  Tensor s(3);
+  check(s.p->shape.empty(), "ctor(3): rank 0");
+  check(s.p->num_el == 1, "ctor(3): one element");
+  check(s.item() == 3, "ctor(3): scalar value");
+
+  Tensor i({3});
+  check_shape(i, {3}, "ctor({3}): shape");
+  check_data(i, {0, 0, 0}, "ctor({3}): zero-initialized");
+
+  Tensor v(std::vector<size_t>{2, 3});
+  check_shape(v, {2, 3}, "ctor(vector): shape");
+  check_strides(v, {3, 1}, "ctor(vector): strides");
+
+  Tensor d(2, 3);
+  check_shape(d, {2, 3}, "ctor(2,3): shape");
+  check_strides(d, {3, 1}, "ctor(2,3): strides");
+
+  check(Tensor().empty(), "ctor(): empty");
+  check(not s.empty(), "ctor(3): not empty");
+}
+
+static void test_set_data_forms() {
+  Tensor a(2, 2);
+
+  std::vector<dtype> v{1, 2, 3, 4};
+  a.set_data(v);
+  check_data(a, {1, 2, 3, 4}, "set_data(lvalue vector): data");
+
+  a.set_data(5, 6, 7, 8);
+  check_data(a, {5, 6, 7, 8}, "set_data(variadic): data");
+
+  std::array<dtype, 4> arr{9, 10, 11, 12};
+  a.set_data(arr);
+  check_data(a, {9, 10, 11, 12}, "set_data(std::array): data");
+
+  check_throws<std::invalid_argument>([&] { a.set_data(1, 2, 3); }, "set_data: size mismatch");
+  check_throws<std::invalid_argument>([&] { Tensor().set_data(1, 2); }, "set_data: empty tensor");
+}
+
+static void test_raw() {
+  Tensor a = mk({2, 3}, {1, 2, 3, 4, 5, 6});
+  Tensor b = mk({2, 3}, {10, 20, 30, 40, 50, 60});
+  Tensor c = mk({3}, {10, 20, 30});
+
+  check_same(NN::Raw::add(a, b), a + b, "Raw::add: matches operator+");
+  check_same(NN::Raw::sub(a, b), a - b, "Raw::sub: matches operator-");
+  check_same(NN::Raw::mul(a, b), a * b, "Raw::mul: matches operator*");
+
+  const auto bc = NN::Raw::add(a, c);
+  check_shape(bc, {2, 3}, "Raw::add broadcast: shape");
+  check_data(bc, {11, 22, 33, 14, 25, 36}, "Raw::add broadcast: data");
+
+  check_same(NN::Raw::sub(a, c), a.sub(c), "Raw::sub broadcast: matches member");
+
+  Tensor x = mk({2, 3}, {1, 2, 3, 4, 5, 6});
+  Tensor y = mk({3, 2}, {1, 2, 3, 4, 5, 6});
+  const auto m = NN::Raw::matmul(x, y);
+  check_shape(m, {2, 2}, "Raw::matmul: shape");
+  check_data(m, {22, 28, 49, 64}, "Raw::matmul: data");
+  check_same(m, x.matmul(y), "Raw::matmul: matches member");
+
+  check_throws<std::invalid_argument>([&] { (void)NN::Raw::add(a, mk({2, 2}, {1, 2, 3, 4})); }, "Raw::add: incompatible shapes");
+  check_throws<std::invalid_argument>([&] { (void)NN::Raw::matmul(mk({2, 3}, std::vector<dtype>(6)), mk({2, 3}, std::vector<dtype>(6))); }, "Raw::matmul: inner dimensions");
+}
+
+static void test_clone() {
+  Tensor a = mk({2, 2}, {1, 2, 3, 4});
+  Tensor b = a.clone();
+
+  check(b.p != a.p, "clone: distinct storage");
+  check_data(b, {1, 2, 3, 4}, "clone: data");
+  check_strides(b, {2, 1}, "clone: strides");
+
+  b.p->data[0] = 99;
+  check_data(a, {1, 2, 3, 4}, "clone: source unchanged");
+}
+
+static void test_shape_ops() {
+  Tensor t = mk({2, 3}, {1, 2, 3, 4, 5, 6});
+
+  const auto r = t.reshape(3, 2);
+  check_shape(r, {3, 2}, "reshape: shape");
+  check_strides(r, {2, 1}, "reshape: strides");
+  check_data(r, {1, 2, 3, 4, 5, 6}, "reshape: data");
+
+  const std::vector<size_t> flat{6};
+  check_shape(t.reshape(flat), {6}, "reshape(vector): shape");
+  check_data(t.reshape(flat), {1, 2, 3, 4, 5, 6}, "reshape(vector): data");
+
+  check_throws<std::invalid_argument>([&] { (void)t.reshape(2, 2); }, "reshape: element count mismatch");
+
+  const auto e0 = t.expand(0, 2);
+  check_shape(e0, {2, 2, 3}, "expand(0,2): shape");
+  check_data(e0, {1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6}, "expand(0,2): data");
+
+  const auto e1 = mk({2, 2}, {1, 2, 3, 4}).expand(1, 2);
+  check_shape(e1, {2, 2, 2}, "expand(1,2): shape");
+  check_data(e1, {1, 2, 1, 2, 3, 4, 3, 4}, "expand(1,2): data");
+
+  const auto e2 = mk({2, 2}, {1, 2, 3, 4}).expand(2, 3);
+  check_shape(e2, {2, 2, 3}, "expand(rank): shape");
+  check_data(e2, {1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4}, "expand(rank): data");
+
+  check_throws<std::out_of_range>([&] { (void)t.expand(3, 2); }, "expand: dim out of range");
+}
+
 int main() {
   test_indexing();
+  test_constructors();
+  test_set_data_forms();
   test_transpose();
   test_reduce();
   test_broadcasting();
+  test_raw();
   test_matmul();
   test_cat();
   test_stack();
   test_permute();
+  test_clone();
+  test_shape_ops();
 
   if (failures != 0) {
     std::println(stderr, "{} check(s) failed", failures);

@@ -50,12 +50,19 @@ namespace NN::Autograd {
   }
 
   void accumulate(Impl &p, const Tensor &g) {
+    if (!g.p)
+      throw std::invalid_argument("Empty gradient.");
     if (p.shape != g.p->shape)
       throw std::invalid_argument("Incompatible shape.");
     if (!p.grad)
       p.grad = std::make_shared<Tensor>(g.clone());
-    else
-      *p.grad += g;
+    else {
+      // In-place op would reject g if it's a graph node.
+      auto &pd = p.grad->p->data;
+      const auto &gd = g.p->data;
+      for (size_t i = 0; i < pd.size(); i++)
+        pd[i] += gd[i];
+    }
   }
 
   void backward(const Tensor &root) {
@@ -76,7 +83,8 @@ namespace NN::Autograd {
     };
     visit(root.p.get());
 
-    Tensor seed(1);
+    Tensor seed(root.p->shape);
+    seed.p->data.assign(seed.p->num_el, 1);
     accumulate(*root.p, seed);
 
     for (auto v : order | std::views::reverse) {
@@ -87,6 +95,7 @@ namespace NN::Autograd {
           throw std::logic_error("Requires backward rule, not present.");
         v->grad_fn->backward(*v->grad);
       }
+      v->grad.reset();
     }
   }
 } // namespace NN::Autograd
