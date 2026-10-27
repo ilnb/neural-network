@@ -10,7 +10,11 @@ namespace NN {
   concept ConvIntervalOf = std::ranges::random_access_range<R> and std::convertible_to<std::ranges::range_value_t<R>, T>;
 
   // Element type for raw values.
+#ifdef NN_DTYPE
+  using dtype = NN_DTYPE;
+#else
   using dtype = float;
+#endif
 
   // forward decl
   namespace Autograd {

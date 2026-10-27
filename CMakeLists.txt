@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(neural-net LANGUAGES CXX)
 
+set(NN_DTYPE "float" CACHE STRING "Type of NN::dtype")
+set_property(CACHE NN_DTYPE PROPERTY STRINGS float double)
+if(NOT NN_DTYPE MATCHES "^(float|double)$")
+  message(FATAL_ERROR "NN_DTYPE must be 'float' or 'double', got ${NN_DTYPE}")
+endif()
+
 add_library(neural
   src/tensor/detail.cpp
   src/tensor/tensor.cpp
@@ -15,6 +21,8 @@ target_include_directories(neural
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_compile_definitions(neural PUBLIC NN_DTYPE=${NN_DTYPE})
 
 add_executable(tensor_test tests/tensor.cpp)
 add_executable(act_test tests/act.cpp)
