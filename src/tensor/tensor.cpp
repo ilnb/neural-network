@@ -48,7 +48,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::reshape(dz, std::vector(ap->shape)));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -63,7 +63,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::transpose(dz));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -104,7 +104,7 @@ namespace NN {
           accumulate(*bp, split_grad(bp->shape, b_block, a_block));
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -142,7 +142,7 @@ namespace NN {
           accumulate(*bp, split_grad(bp, 1));
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
 
@@ -177,7 +177,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::permute(dz, inv));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
 
@@ -242,7 +242,7 @@ namespace NN {
           xd[i] = zd[i] / (2 * rd[i]);
         Autograd::accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -260,7 +260,7 @@ namespace NN {
         std::ranges::fill(dx.p->data, dz.p->data[0]);
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -288,7 +288,7 @@ namespace NN {
         dx.p->data[idx] = dz.p->data[0];
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -310,7 +310,7 @@ namespace NN {
         dx.p->data[idx] = dz.p->data[0];
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -326,7 +326,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::sum(dz, dim));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
 
@@ -342,7 +342,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::expand(dz, dim, ap->shape[dim]));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -370,7 +370,7 @@ namespace NN {
           x /= f;
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -406,7 +406,7 @@ namespace NN {
 
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -442,7 +442,7 @@ namespace NN {
 
         accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -457,7 +457,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, dz);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -476,7 +476,7 @@ namespace NN {
         if (bp->requires_grad)
           accumulate(*bp, Autograd::sum_to_shape(dz, bp->shape));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -512,7 +512,7 @@ namespace NN {
         if (bp->requires_grad)
           accumulate(*bp, Autograd::sum_to_shape(Detail::neg(dz), bp->shape));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -542,7 +542,7 @@ namespace NN {
         if (bp->requires_grad)
           accumulate(*bp, Autograd::sum_to_shape(Detail::binary_broadcast(dz, Tensor(ap), std::multiplies<>()), bp->shape));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -557,7 +557,7 @@ namespace NN {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = {p};
       fn->backward = [ap = p, x](const Tensor &dz) { accumulate(*ap, dz * x); };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -594,7 +594,7 @@ namespace NN {
           accumulate(*bp, Autograd::sum_to_shape(Detail::matmul(a_t, dz), bp->shape));
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -610,7 +610,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::neg(dz));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -642,7 +642,7 @@ namespace NN {
         if (ap->requires_grad)
           accumulate(*ap, Detail::neg(dz));
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
