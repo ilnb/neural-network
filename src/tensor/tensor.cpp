@@ -43,7 +43,7 @@ namespace NN {
     auto r = Detail::reshape(*this, std::move(v));
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::reshape(dz, std::vector(ap->shape)));
@@ -58,7 +58,7 @@ namespace NN {
     auto r = Detail::transpose(*this);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::transpose(dz));
@@ -74,7 +74,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
 
       fn->backward = [ap = p, bp = b.p, dim](const Tensor &dz) {
         auto &ashape = ap->shape, &bshape = bp->shape;
@@ -115,7 +115,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
 
       fn->backward = [ap = p, bp = b.p, dim](const Tensor &dz) {
         const auto &shape = ap->shape;
@@ -172,7 +172,7 @@ namespace NN {
         x -= n;
 
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, inv = std::move(v)](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::permute(dz, inv));
@@ -232,7 +232,7 @@ namespace NN {
     auto r = Detail::sqrt(*this);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, rp = r.p](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -252,7 +252,7 @@ namespace NN {
     auto r = Detail::sum(*this);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -280,7 +280,7 @@ namespace NN {
     Tensor r(p->data[idx]);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, idx](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -302,7 +302,7 @@ namespace NN {
     Tensor r(p->data[idx]);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, idx](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -321,7 +321,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, dim](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::sum(dz, dim));
@@ -337,7 +337,7 @@ namespace NN {
     auto r = Detail::sum(*this, dim);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, dim](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::expand(dz, dim, ap->shape[dim]));
@@ -354,13 +354,13 @@ namespace NN {
     if (dim >= p->shape.size())
       throw std::out_of_range("Out of bounds axis.");
     const dtype f = p->shape[dim];
-    auto r = Detail::reduce(*this, dim, dtype{0}, std::plus<>());
+    auto r = Detail::reduce(*this, dim, dtype{ 0 }, std::plus<>());
     for (auto &x : r.p->data)
       x /= f;
 
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, dim](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -381,7 +381,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -417,7 +417,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, idx = std::move(idx), dim](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
@@ -452,7 +452,7 @@ namespace NN {
     auto r = Detail::add(*this, x);
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, dz);
@@ -469,7 +469,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Autograd::sum_to_shape(dz, ap->shape));
@@ -505,7 +505,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Autograd::sum_to_shape(dz, ap->shape));
@@ -535,7 +535,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Autograd::sum_to_shape(Detail::binary_broadcast(dz, Tensor(bp), std::multiplies<>()), ap->shape));
@@ -555,7 +555,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p, x](const Tensor &dz) { accumulate(*ap, dz * x); };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -583,7 +583,7 @@ namespace NN {
 
     if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p, b.p};
+      fn->inputs = { p, b.p };
 
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
         Tensor a(ap), b(bp);
@@ -605,7 +605,7 @@ namespace NN {
     std::ranges::for_each(r.p->data, [](dtype &x) { x = -x; });
     if (Autograd::grad_enabled and p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {p};
+      fn->inputs = { p };
       fn->backward = [ap = p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::neg(dz));
@@ -637,7 +637,7 @@ namespace NN {
       rdata[i] = x - data[i];
     if (Autograd::grad_enabled and a.p->requires_grad) {
       auto fn = std::make_shared<GradFn>();
-      fn->inputs = {a.p};
+      fn->inputs = { a.p };
       fn->backward = [ap = a.p](const Tensor &dz) {
         if (ap->requires_grad)
           accumulate(*ap, Detail::neg(dz));

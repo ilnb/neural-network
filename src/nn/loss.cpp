@@ -14,7 +14,7 @@ namespace NN::Loss {
 
     if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
-      fn->inputs = {pred.p, target.p};
+      fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
         const dtype f = dz.p->data[0] * 2 / ap->num_el;
@@ -44,7 +44,7 @@ namespace NN::Loss {
     auto r = Detail::bce(pred, target);
     if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
-      fn->inputs = {pred.p, target.p};
+      fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
         const dtype f = dz.p->data[0] / ap->num_el;
@@ -81,7 +81,7 @@ namespace NN::Loss {
 
     if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
-      fn->inputs = {pred.p, target.p};
+      fn->inputs = { pred.p, target.p };
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {
         const dtype f = -dz.p->data[0] * static_cast<dtype>(ap->shape[dim]) / ap->num_el;
         const auto &pdata = ap->data;

@@ -118,7 +118,7 @@ namespace NN {
     // Constructs a scalar holding `x`.
     explicit Tensor(dtype x) : p(std::make_shared<Impl>()) {
       p->num_el = 1;
-      p->data = {x};
+      p->data = { x };
     }
 
     // Constructs a tensor from a shape range. Data is zero-initialized.
@@ -151,7 +151,7 @@ namespace NN {
     template <typename... Args>
       requires(sizeof...(Args) > 1) and (std::integral<Args> and ...)
     explicit Tensor(Args... dims) : p(std::make_shared<Impl>()) {
-      p->shape = std::vector{static_cast<size_t>(dims)...};
+      p->shape = std::vector{ static_cast<size_t>(dims)... };
       const size_t n = Detail::checked_num_el(p->shape);
       finalize_shape(n, false);
     }
@@ -176,7 +176,7 @@ namespace NN {
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... vals) {
-      return set_data(std::array<dtype, sizeof...(Args)>{static_cast<dtype>(vals)...});
+      return set_data(std::array<dtype, sizeof...(Args)>{ static_cast<dtype>(vals)... });
     }
 
     // Takes data as an initializer_list
@@ -209,7 +209,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor &set_dims(Args... vals) {
-      return set_dims(std::vector<size_t>{static_cast<size_t>(vals)...});
+      return set_dims(std::vector<size_t>{ static_cast<size_t>(vals)... });
     }
 
     // Same as the range overload, taking a shape vector.
@@ -257,7 +257,7 @@ namespace NN {
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
     decltype(auto) at(this Self &&self, Args... idx) {
-      return self.at(std::array<size_t, sizeof...(Args)>{static_cast<size_t>(idx)...});
+      return self.at(std::array<size_t, sizeof...(Args)>{ static_cast<size_t>(idx)... });
     }
 
     // Element access without bounds checking.
@@ -271,7 +271,7 @@ namespace NN {
         throw std::invalid_argument("Empty tensor.");
       if (sizeof...(idx) != self.p->shape.size())
         throw std::invalid_argument("Number of indices doesnt match tensor rank.");
-      std::array<size_t, sizeof...(Args)> tmp{static_cast<size_t>(idx)...};
+      std::array<size_t, sizeof...(Args)> tmp{ static_cast<size_t>(idx)... };
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++)
         offset += tmp[i] * self.p->strides[i];
@@ -297,7 +297,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor reshape(Args... dims) const {
-      return reshape(std::vector{static_cast<size_t>(dims)...});
+      return reshape(std::vector{ static_cast<size_t>(dims)... });
     }
 
     Tensor reshape(std::vector<size_t> &&v) const;
@@ -343,7 +343,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor permute(Args... args) const {
-      return permute(std::vector{static_cast<size_t>(args)...});
+      return permute(std::vector{ static_cast<size_t>(args)... });
     }
 
     Tensor permute(std::vector<size_t> &&v) const;

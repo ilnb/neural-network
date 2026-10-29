@@ -184,7 +184,7 @@ namespace NN::Detail {
       indices[out] = idx;
     }
 
-    return {std::move(ret), std::move(indices)};
+    return { std::move(ret), std::move(indices) };
   }
 
   // Applies `op(data[i], b[offset])` in place, with `b` broadcast into `*this`.
