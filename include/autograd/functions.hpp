@@ -24,8 +24,11 @@ namespace NN::Autograd {
   // `root` must require grad and hold exactly one element; it is seeded with a
   // gradient of 1. The graph is walked in reverse topological order, each
   // node's `backward` is called once with its output gradient, and the adjoint
-  // is accumulated into the leaves. Intermediate gradients are dropped after
-  // use, while leaf gradients persist and accumulate across calls.
+  // is accumulated into the leaves. Intermediate gradients are dropped as they
+  // are consumed, and each node's `grad_fn` is released when the walk finishes,
+  // so a graph is good for a single pass. Leaf gradients persist, but a second
+  // call re-seeds the root without reaching them; combine multiple losses into
+  // one root first.
   //
   // Throws `std::logic_error` if `root` does not require grad or a node has no
   // backward rule, and `std::invalid_argument` if `root` is not a scalar.

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nn/module.hpp"
+#include "nn/module/base.hpp"
 #include "tensor/tensor.hpp"
 #include <memory>
 #include <type_traits>

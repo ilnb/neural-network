@@ -115,23 +115,22 @@ static void test_seed_and_roots() {
 
 static void test_accumulation() {
   {
-    // Two roots over a shared subgraph.
+    // Several losses over a shared subgraph must be summed into one root
+    // before backward, since the graph is released by the pass.
     Tensor x = mk_grad({2}, {1, 1});
     auto u = x * 2;
-    auto y1 = u.sum();
-    auto y2 = (u * 3).sum();
-    y1.backward();
-    y2.backward();
-    check_grad(x, {8, 8}, "accumulation: two roots accumulate");
+    (u.sum() + (u * 3).sum()).backward(); // d/dx = 2 + 6
+    check_grad(x, {8, 8}, "accumulation: summed losses share the subgraph");
   }
   {
-    // Repeated backward on the same graph keeps adding.
+    // The graph is released after a pass: a second backward seeds the root
+    // again but cannot reach the leaves.
     Tensor x = mk_grad({2}, {1, 1});
     auto y = (x * 2 + x).sum(); // d/dx = 3
     y.backward();
     check_grad(x, {3, 3}, "accumulation: first pass");
     y.backward();
-    check_grad(x, {6, 6}, "accumulation: second pass adds in");
+    check_grad(x, {3, 3}, "accumulation: second pass propagates nothing");
   }
   {
     // The same tensor used twice in one expression.
@@ -353,8 +352,7 @@ static void test_loss_targets() {
     Tensor p = mk_grad({2, 3}, {0.09003057f, 0.24472847f, 0.66524096f, 0.3333333f, 0.3333333f, 0.3333333f});
     Tensor t = mk_grad({2, 3}, {0, 0, 1, 1, 0, 0});
     Loss::ce(p, t).backward();
-    check_grad(t, {1.203803f, 0.703803f, 0.203803f, 0.5493062f, 0.5493062f, 0.5493062f},
-               "ce target grad: -log(p)/slices", 1e-5f);
+    check_grad(t, {1.203803f, 0.703803f, 0.203803f, 0.5493062f, 0.5493062f, 0.5493062f}, "ce target grad: -log(p)/slices", 1e-5f);
   }
   {
     Tensor p = mk({1}, {0.5f});

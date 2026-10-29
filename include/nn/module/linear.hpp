@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nn/module.hpp"
+#include "nn/module/base.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
 #include <cmath>

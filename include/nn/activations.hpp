@@ -1,10 +1,8 @@
 #pragma once
 
-#include "nn/module.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
 #include <concepts>
-#include <vector>
 
 namespace NN::Act {
   // Standard sigmoid.
@@ -32,20 +30,6 @@ namespace NN::Act {
   //
   // Throws the same exceptions as `softmax`.
   Tensor log_softmax(const Tensor &x, size_t dim);
-
-  // Relu module for pipeline
-  struct ReLU : Module {
-    Tensor forward(const Tensor &x) const override { return relu(x); }
-
-    std::vector<Tensor> params() const override { return {}; }
-  };
-
-  // Sigmoid module for pipeline
-  struct Sigmoid : Module {
-    Tensor forward(const Tensor &x) const override { return sigmoid(x); }
-
-    std::vector<Tensor> params() const override { return {}; }
-  };
 
   // Raw activation kernels.
   //

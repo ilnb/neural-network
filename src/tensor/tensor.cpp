@@ -502,9 +502,8 @@ namespace NN {
 
   Tensor &Tensor::sub_(const Tensor &b) {
     check_mutable();
+    b.check_mutable();
     validate(*this, b);
-    if (b.p->requires_grad or b.p->grad_fn)
-      throw std::logic_error("In-place op involving autograd tensor.");
     if (not Detail::broadcasts_into(p->shape, b.p->shape))
       throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
     return Detail::binary_inplace(*this, b, std::minus<>());

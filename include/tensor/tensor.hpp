@@ -74,8 +74,11 @@ namespace NN {
   //
   // `backward()` starts at a scalar root, seeds its gradient with 1, walks the
   // graph in reverse topological order and adds each adjoint into `grad`.
-  // Intermediate gradients are released after use; leaf gradients are kept, so
-  // a second `backward()` accumulates on top of the first.
+  // Intermediate gradients are released as they are consumed, and every node's
+  // `grad_fn` is dropped once the walk finishes, so a graph supports a single
+  // backward pass. Leaf gradients stay behind, but a second call on the same
+  // root only re-seeds the root and propagates nothing; to combine several
+  // losses, add them into one expression before calling `backward()`.
   //
   // ```
   // Tensor x({2});
@@ -376,8 +379,8 @@ namespace NN {
     // Runs backpropagation from this tensor.
     //
     // The tensor must require grad and hold exactly one element; it is seeded
-    // with a gradient of 1. Leaf gradients accumulate, so calling `backward()`
-    // twice adds the second pass on top of the first.
+    // with a gradient of 1. Every node's `grad_fn` is released by the pass, so
+    // a graph is walked once.
     //
     // Throws `std::logic_error` if the tensor does not require grad or a node
     // on the path has no backward rule, and `std::invalid_argument` if the

@@ -1,7 +1,7 @@
-#include "nn/activations.hpp"
-#include "nn/linear.hpp"
 #include "nn/loss.hpp"
-#include "nn/sequential.hpp"
+#include "nn/module/linear.hpp"
+#include "nn/module/relu.hpp"
+#include "nn/module/sequential.hpp"
 #include "optim/sgd.hpp"
 #include "tensor/tensor.hpp"
 #include <print>
@@ -10,7 +10,7 @@ int main() {
   NN::Sequential model(
       // clang-format off
     NN::Linear(2, 4),
-    NN::Act::ReLU(),
+    NN::ReLU(),
     NN::Linear(4, 1)
       // clang-format on
   );
