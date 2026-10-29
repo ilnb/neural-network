@@ -28,7 +28,7 @@ int main() {
   std::println("grad_w : {}", params[0].p->grad->p->data);
   std::println("grad_b : {}", params[1].p->grad->p->data);
 
-  NN::Optim::SGD sgd(model.params(), 0.1);
+  NN::Optim::SGD sgd(model.params(), { .lr = 0.1, .beta = 0 });
   sgd.step();
   sgd.zero_grad();
 

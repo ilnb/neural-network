@@ -19,7 +19,7 @@ int main() {
   x.set_data(0, 0, 0, 1, 1, 0, 1, 1);
   NN::Tensor y(4, 1);
   y.set_data(0, 1, 1, 0);
-  NN::Optim::SGD opt(model.params(), 0.01);
+  NN::Optim::SGD opt(model.params());
 
   for (size_t e = 0; e < 5000; e++) {
     auto pred = model.forward(x);
