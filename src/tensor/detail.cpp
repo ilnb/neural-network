@@ -1,6 +1,8 @@
 #include "tensor/detail.hpp"
+#include "nn/activations.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace NN::Detail {
@@ -8,6 +10,12 @@ namespace NN::Detail {
     auto r = t.clone();
     std::ranges::for_each(r.p->data, [](dtype &x) { x = -x; });
     return r;
+  }
+
+  Tensor sqrt(const Tensor &t) {
+    if (t.empty())
+      throw std::domain_error("Empty tensor.");
+    return Act::Detail::map(t, [](auto x) { return std::sqrt(x); });
   }
 
   Tensor sum(const Tensor &t) {

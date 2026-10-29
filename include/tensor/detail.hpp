@@ -18,6 +18,8 @@ namespace NN::Detail {
   // Throws `std::invalid_argument` if `t` is empty.
   Tensor neg(const Tensor &t);
 
+  Tensor sqrt(const Tensor &t);
+
   Tensor sum(const Tensor &t);
 
   Tensor sum(const Tensor &t, size_t dim);

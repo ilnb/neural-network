@@ -405,6 +405,11 @@ namespace NN {
     // contain exactly one element.
     dtype item() const;
 
+    // Return a copy of the tensor with all elememnts sqrt-ed.
+    //
+    // Throws `std::domain_error` for an empty tensor.
+    Tensor sqrt() const;
+
     // Sum of all elements.
     //
     // Throws `std::domain_error` for an empty tensor.

@@ -228,6 +228,26 @@ namespace NN {
     return p->data[0];
   }
 
+  Tensor Tensor::sqrt() const {
+    auto r = Detail::sqrt(*this);
+    if (Autograd::grad_enabled and p->requires_grad) {
+      auto fn = std::make_shared<GradFn>();
+      fn->inputs = {p};
+      fn->backward = [ap = p, rp = r.p](const Tensor &dz) {
+        if (!ap->requires_grad)
+          return;
+        Tensor dx(ap->shape);
+        auto &xd = dx.p->data, &zd = dz.p->data, &rd = rp->data;
+        for (size_t i = 0, n = ap->num_el; i < n; i++)
+          xd[i] = zd[i] / (2 * rd[i]);
+        Autograd::accumulate(*ap, dx);
+      };
+      r.p->grad_fn = fn;
+      r.p->requires_grad = true;
+    }
+    return r;
+  }
+
   Tensor Tensor::sum() const {
     auto r = Detail::sum(*this);
     if (Autograd::grad_enabled and p->requires_grad) {
