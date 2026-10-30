@@ -94,6 +94,8 @@ namespace NN::Reg {
     Tensor elastic_net(const Tensor &weight, const dtype alpha) {
       if (weight.empty())
         throw std::invalid_argument("Empty tensor.");
+      if (alpha < 0 or 1 < alpha)
+        throw std::invalid_argument("`alpha` should be in [0, 1].");
       return Tensor(std::ranges::fold_left(weight.p->data, dtype(0), [alpha](dtype x, dtype w) { return x + alpha * std::abs(w) + (dtype(1) - alpha) * dtype(0.5) * w * w; }));
     }
   } // namespace Detail
