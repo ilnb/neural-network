@@ -1,5 +1,6 @@
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
+#include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
 #include <functional>
 #include <memory>
@@ -50,12 +51,19 @@ namespace NN::Autograd {
   }
 
   void accumulate(Impl &p, const Tensor &g) {
+    if (!g.p)
+      throw std::invalid_argument("Empty gradient.");
     if (p.shape != g.p->shape)
       throw std::invalid_argument("Incompatible shape.");
     if (!p.grad)
       p.grad = std::make_shared<Tensor>(g.clone());
-    else
-      *p.grad += g;
+    else {
+      // In-place op would reject g if it's a graph node.
+      auto &pd = p.grad->p->data;
+      const auto &gd = g.p->data;
+      for (size_t i = 0; i < pd.size(); i++)
+        pd[i] += gd[i];
+    }
   }
 
   void backward(const Tensor &root) {
@@ -63,6 +71,8 @@ namespace NN::Autograd {
       throw std::logic_error("backward on a tensor that doesnt require grad.");
     if (root.p->num_el != 1)
       throw std::invalid_argument("backward requires a scalar root.");
+
+    NoGradGuard g; // closure must not record
 
     std::vector<Impl *> order;
     std::unordered_set<Impl *> seen;
@@ -90,5 +100,7 @@ namespace NN::Autograd {
       }
       v->grad.reset();
     }
+    for (auto v : order)
+      v->grad_fn.reset();
   }
 } // namespace NN::Autograd

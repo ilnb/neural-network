@@ -3,5 +3,5 @@ BasedOnStyle: LLVM
 ColumnLimit: 180
 NamespaceIndentation: All
 AlwaysBreakTemplateDeclarations: Yes
-Cpp11BracedListStyle: true
+Cpp11BracedListStyle: false
 Standard: Auto
