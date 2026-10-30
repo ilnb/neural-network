@@ -11,6 +11,7 @@ add_library(neural
   src/tensor/detail.cpp
   src/tensor/tensor.cpp
   src/nn/activations.cpp
+  src/nn/regularization.cpp
   src/nn/loss.cpp
   src/autograd/functions.cpp
   src/optims.cpp
