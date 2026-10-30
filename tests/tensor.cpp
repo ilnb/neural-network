@@ -1,28 +1,11 @@
 #include "tensor/tensor.hpp"
+#include "utils.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <initializer_list>
 #include <print>
 #include <vector>
-
-using NN::dtype, NN::Tensor;
-
-static int failures = 0;
-
-static void check(bool ok, const char *what) {
-  if (not ok) {
-    std::println(stderr, "FAIL: {}", what);
-    failures++;
-  }
-}
-
-static void check_close(dtype got, dtype want, dtype tol, const char *what) {
-  if (std::abs(got - want) > tol) {
-    std::println(stderr, "FAIL: {} (got {}, want {})", what, got, want);
-    failures++;
-  }
-}
 
 static void check_shape(const Tensor &t, std::initializer_list<size_t> want, const char *what) {
   const std::vector<size_t> w(want);
@@ -54,26 +37,6 @@ static void check_data(const Tensor &t, std::initializer_list<dtype> want, const
       return;
     }
   }
-}
-
-template <typename Ex, typename F>
-static void check_throws(F f, const char *what) {
-  try {
-    f();
-    std::println(stderr, "FAIL: {} (no exception)", what);
-    failures++;
-  } catch (const Ex &) {
-  } catch (const std::exception &e) {
-    std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
-    failures++;
-  }
-}
-
-static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
-  Tensor t;
-  t.set_dims(std::move(shape), false);
-  t.set_data(vals);
-  return t;
 }
 
 // Compares shape and values against another tensor.

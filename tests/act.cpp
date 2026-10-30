@@ -1,39 +1,16 @@
 #include "nn/activations.hpp"
+#include "utils.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <print>
 #include <vector>
 
-using NN::dtype, NN::Tensor;
 namespace Act = NN::Act;
-
-static int failures = 0;
-
-static void check(bool ok, const char *what) {
-  if (not ok) {
-    std::println(stderr, "FAIL: {}", what);
-    failures++;
-  }
-}
-
-static void check_close(dtype got, dtype want, dtype tol, const char *what) {
-  if (not(std::abs(got - want) <= tol)) {
-    std::println(stderr, "FAIL: {} (got {}, want {})", what, got, want);
-    failures++;
-  }
-}
 
 static void check_data(const Tensor &t, std::initializer_list<dtype> want, const char *what) {
   const std::vector<dtype> w(want);
   check(t.p->data == w, what);
-}
-
-static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
-  Tensor t;
-  t.set_dims(std::move(shape), false);
-  t.set_data(vals);
-  return t;
 }
 
 // Calls `f` with every index whose coordinate along `dim` is 0.

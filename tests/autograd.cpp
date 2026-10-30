@@ -1,44 +1,15 @@
 #include "nn/activations.hpp"
 #include "nn/loss.hpp"
 #include "tensor/tensor.hpp"
+#include "utils.hpp"
 #include <cmath>
 #include <initializer_list>
 #include <print>
 #include <stdexcept>
 #include <vector>
 
-using NN::dtype, NN::Tensor;
 namespace Act = NN::Act;
 namespace Loss = NN::Loss;
-
-static int failures = 0;
-
-static void check(bool ok, const char *what) {
-  if (not ok) {
-    std::println(stderr, "FAIL: {}", what);
-    failures++;
-  }
-}
-
-static void check_close(dtype got, dtype want, dtype tol, const char *what) {
-  if (not(std::abs(got - want) <= tol)) {
-    std::println(stderr, "FAIL: {} (got {}, want {})", what, got, want);
-    failures++;
-  }
-}
-
-static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
-  Tensor t;
-  t.set_dims(std::move(shape), false);
-  t.set_data(vals);
-  return t;
-}
-
-static Tensor mk_grad(std::vector<size_t> shape, std::vector<dtype> vals) {
-  Tensor t = mk(std::move(shape), std::move(vals));
-  t.set_requires_grad(true);
-  return t;
-}
 
 // Checks the accumulated gradient of `t` against `want`.
 static void check_grad(const Tensor &t, std::initializer_list<dtype> want, const char *what, dtype tol = 1e-5f) {
@@ -66,19 +37,6 @@ static void check_grad(const Tensor &t, std::initializer_list<dtype> want, const
       failures++;
       return;
     }
-  }
-}
-
-template <typename Ex, typename F>
-static void check_throws(F f, const char *what) {
-  try {
-    f();
-    std::println(stderr, "FAIL: {} (no exception)", what);
-    failures++;
-  } catch (const Ex &) {
-  } catch (const std::exception &e) {
-    std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
-    failures++;
   }
 }
 

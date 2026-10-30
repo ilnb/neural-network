@@ -1,48 +1,12 @@
 #include "nn/loss.hpp"
+#include "utils.hpp"
 #include <cmath>
 #include <limits>
 #include <print>
 #include <stdexcept>
 #include <vector>
 
-using NN::dtype, NN::Tensor;
 namespace Loss = NN::Loss;
-
-static int failures = 0;
-
-static void check(bool ok, const char *what) {
-  if (not ok) {
-    std::println(stderr, "FAIL: {}", what);
-    failures++;
-  }
-}
-
-static void check_close(dtype got, dtype want, dtype tol, const char *what) {
-  if (std::abs(got - want) > tol) {
-    std::println(stderr, "FAIL: {} (got {}, want {})", what, got, want);
-    failures++;
-  }
-}
-
-static Tensor mk(std::vector<size_t> shape, std::vector<dtype> vals) {
-  Tensor t;
-  t.set_dims(std::move(shape), false);
-  t.set_data(vals);
-  return t;
-}
-
-template <typename Ex, typename F>
-static void check_throws(F f, const char *what) {
-  try {
-    f();
-    std::println(stderr, "FAIL: {} (no exception)", what);
-    failures++;
-  } catch (const Ex &) {
-  } catch (const std::exception &e) {
-    std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
-    failures++;
-  }
-}
 
 static void test_mse() {
   check_close(Loss::mse(mk({ 3 }, { 1, 2, 3 }), mk({ 3 }, { 1, 1, 1 })).item(), 1.6666667f, 1e-6f, "mse: (1,2,3) vs (1,1,1)");
