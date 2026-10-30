@@ -34,7 +34,7 @@ namespace NN::Loss {
         }
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -70,7 +70,7 @@ namespace NN::Loss {
         }
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -100,7 +100,7 @@ namespace NN::Loss {
         }
       };
 
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;

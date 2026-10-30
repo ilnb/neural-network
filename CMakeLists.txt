@@ -13,6 +13,7 @@ add_library(neural
   src/nn/activations.cpp
   src/nn/loss.cpp
   src/autograd/functions.cpp
+  src/optims.cpp
 )
 
 target_compile_features(neural PUBLIC cxx_std_23)

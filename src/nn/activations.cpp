@@ -19,6 +19,7 @@ namespace NN::Act {
 
   Tensor relu(const Tensor &x) {
     auto r = Detail::relu(x);
+
     if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = { x.p };
@@ -33,7 +34,7 @@ namespace NN::Act {
           Autograd::accumulate(*ap, dx);
         }
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -41,6 +42,7 @@ namespace NN::Act {
 
   Tensor sigmoid(const Tensor &x) {
     auto r = Detail::sigmoid(x);
+
     if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = { x.p };
@@ -58,7 +60,7 @@ namespace NN::Act {
         }
         Autograd::accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -66,6 +68,7 @@ namespace NN::Act {
 
   Tensor softmax(const Tensor &x, size_t dim) {
     auto r = Detail::softmax(x, dim);
+
     if (Autograd::grad_enabled and x.p->requires_grad) {
       auto fn = std::make_shared<NN::Autograd::GradFn>();
       fn->inputs = { x.p };
@@ -88,7 +91,7 @@ namespace NN::Act {
           xdata[i] = ydata[i] * (zdata[i] - sdata[i]);
         Autograd::accumulate(*ap, dx);
       };
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
     return r;
@@ -119,8 +122,7 @@ namespace NN::Act {
           xdata[i] = zdata[i] - std::exp(ydata[i]) * sdata[i];
         Autograd::accumulate(*ap, dx);
       };
-
-      r.p->grad_fn = fn;
+      r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
     }
 
