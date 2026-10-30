@@ -18,6 +18,14 @@ namespace NN {
       (modules.push_back(std::make_unique<std::remove_cvref_t<M>>(std::forward<M>(args))), ...);
     }
 
+    Module &at(size_t i) { return *modules.at(i); }
+
+    const Module &at(size_t i) const { return *modules.at(i); }
+
+    Module &operator[](size_t i) { return *modules[i]; }
+
+    const Module &operator[](size_t i) const { return *modules[i]; }
+
     Tensor forward(const Tensor &x) const override {
       Tensor r = x;
       for (const auto &m : modules)
