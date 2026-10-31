@@ -6,7 +6,7 @@
 
 namespace NN {
   struct Sigmoid : Module {
-    Tensor forward(const Tensor &x) const override { return NN::Act::sigmoid(x); }
+    Tensor forward(const Tensor &x) override { return NN::Act::sigmoid(x); }
 
     std::vector<Tensor> params() const override { return {}; }
   };

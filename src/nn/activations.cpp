@@ -2,6 +2,7 @@
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"
+#include "nn/detail.hpp"
 #include "tensor/detail.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
@@ -133,13 +134,13 @@ namespace NN::Act {
     Tensor relu(const Tensor &x) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
-      return Tensor(map(x, [](dtype v) { return v > 0 or std::isnan(v) ? v : 0; }));
+      return Tensor(NN::Detail::map(x, [](dtype v) { return v > 0 or std::isnan(v) ? v : 0; }));
     }
 
     Tensor sigmoid(const Tensor &x) {
       if (x.empty())
         throw std::invalid_argument("Empty tensor.");
-      return Tensor(map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
+      return Tensor(NN::Detail::map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
     }
 
     Tensor softmax(const Tensor &x, size_t dim) {

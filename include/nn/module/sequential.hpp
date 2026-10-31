@@ -26,7 +26,7 @@ namespace NN {
 
     const Module &operator[](size_t i) const { return *modules[i]; }
 
-    Tensor forward(const Tensor &x) const override {
+    Tensor forward(const Tensor &x) override {
       Tensor r = x;
       for (const auto &m : modules)
         r = m->forward(r);
@@ -40,6 +40,13 @@ namespace NN {
         ret.append_range(p);
       }
       return ret;
+    }
+
+    void train(bool mode = true) override {
+      Module::train(mode);
+
+      for (auto &m : modules)
+        m->train(mode);
     }
   };
 } // namespace NN

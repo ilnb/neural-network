@@ -1,5 +1,6 @@
 #include "tensor/detail.hpp"
 #include "nn/activations.hpp"
+#include "nn/detail.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -15,7 +16,7 @@ namespace NN::Detail {
   Tensor sqrt(const Tensor &t) {
     if (t.empty())
       throw std::domain_error("Empty tensor.");
-    return Act::Detail::map(t, [](auto x) { return std::sqrt(x); });
+    return map(t, [](auto x) { return std::sqrt(x); });
   }
 
   Tensor sum(const Tensor &t) {

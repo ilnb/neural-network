@@ -7,7 +7,7 @@
 
 namespace NN {
   struct Flatten : Module {
-    Tensor forward(const Tensor &x) const override {
+    Tensor forward(const Tensor &x) override {
       if (x.empty() || x.p->shape.empty())
         throw std::invalid_argument("Non-empty batched tensor expected.");
 

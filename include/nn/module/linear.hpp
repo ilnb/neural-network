@@ -20,7 +20,7 @@ namespace NN {
       b.set_requires_grad(true);
     }
 
-    Tensor forward(const Tensor &x) const override { return x.matmul(w) + b; }
+    Tensor forward(const Tensor &x) override { return x.matmul(w) + b; }
     std::vector<Tensor> params() const override { return { w, b }; }
   };
 } // namespace NN
