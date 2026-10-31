@@ -16,7 +16,7 @@ namespace NN {
     std::vector<bool> mask;
     std::mt19937 rng;
 
-    Dropout(const dtype p, const uint32_t seed = 0) : p(p), rng(seed) {
+    Dropout(const dtype p, const uint32_t seed = std::random_device{}()) : p(p), rng(seed) {
       if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
         throw std::invalid_argument("dropout probability must be in [0, 1).");
     }
