@@ -1,4 +1,4 @@
-#include "nn/loss.hpp"
+#include "loss/loss.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"

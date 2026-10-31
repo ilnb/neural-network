@@ -1,7 +1,7 @@
 #pragma once
 
-#include "nn/activations.hpp"
-#include "nn/module/base.hpp"
+#include "activations/activations.hpp"
+#include "module/base.hpp"
 #include "tensor/tensor.hpp"
 
 namespace NN {

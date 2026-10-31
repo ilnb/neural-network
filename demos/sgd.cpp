@@ -1,8 +1,8 @@
 #include "optim/sgd.hpp"
 #include "autograd/grad_mode.hpp"
-#include "nn/loss.hpp"
-#include "nn/module/linear.hpp"
-#include "nn/module/sequential.hpp"
+#include "loss/loss.hpp"
+#include "module/linear.hpp"
+#include "module/sequential.hpp"
 #include "tensor/tensor.hpp"
 #include <print>
 

@@ -1,4 +1,4 @@
-#include "nn/activations.hpp"
+#include "activations/activations.hpp"
 #include "autograd/functions.hpp"
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"

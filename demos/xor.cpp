@@ -1,7 +1,7 @@
-#include "nn/loss.hpp"
-#include "nn/module/linear.hpp"
-#include "nn/module/relu.hpp"
-#include "nn/module/sequential.hpp"
+#include "loss/loss.hpp"
+#include "module/linear.hpp"
+#include "module/relu.hpp"
+#include "module/sequential.hpp"
 #include "optim/adam.hpp"
 #include "tensor/tensor.hpp"
 #include <print>

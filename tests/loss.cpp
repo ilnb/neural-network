@@ -1,4 +1,4 @@
-#include "nn/loss.hpp"
+#include "loss/loss.hpp"
 #include "utils.hpp"
 #include <cmath>
 #include <limits>
