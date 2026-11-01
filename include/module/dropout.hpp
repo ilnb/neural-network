@@ -39,8 +39,8 @@ namespace NN {
 
       if (x.p->requires_grad) {
         auto fn = std::make_shared<NN::Autograd::GradFn>();
-        fn->inputs = { r.p };
-        fn->backward = [ap = r.p, mask = std::move(mask), scale](const Tensor &dz) {
+        fn->inputs = { x.p };
+        fn->backward = [ap = x.p, mask = std::move(mask), scale](const Tensor &dz) {
           if (!ap->requires_grad)
             return;
           Tensor dx(ap->shape);

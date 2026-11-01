@@ -30,7 +30,7 @@ namespace NN::Detail {
     requires requires(F f, size_t idx, dtype x) {
       { f(idx, x) } -> std::convertible_to<dtype>;
     }
-  Tensor map(Tensor &x, F f) {
+  Tensor map_(Tensor &x, F f) {
     dtype *d = x.p->data.data();
     for (size_t i = 0, n = x.p->num_el; i < n; i++)
       d[i] = f(i, d[i]);
@@ -44,7 +44,7 @@ namespace NN::Detail {
     requires requires(F f, size_t idx, dtype x) {
       { f(idx, x) } -> std::convertible_to<dtype>;
     }
-  Tensor map_(const Tensor &x, F f) {
+  Tensor map(const Tensor &x, F f) {
     Tensor r = x.clone();
     return map_(r, f);
   }

@@ -54,7 +54,6 @@ namespace NN::Optim {
       auto &pd = p.p->data, &vd = v.p->data;
       const auto &g = *p.p->grad;
       for (size_t j = 0, itr = p.p->num_el; j < itr; j++) {
-        pd[j] -= g.p->data[j] * hp.lr;
         vd[j] *= hp.beta;
         vd[j] += g.p->data[j];
         pd[j] -= vd[j] * hp.lr;
