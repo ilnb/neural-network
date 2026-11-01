@@ -2,8 +2,6 @@
 
 #include "data/dataset.hpp"
 #include "tensor/tensor.hpp"
-#include <algorithm>
-#include <ranges>
 #include <stdexcept>
 
 namespace NN::Data {
@@ -21,21 +19,9 @@ namespace NN::Data {
 
     size_t size() const override { return data.p->shape[0]; }
 
-    std::pair<Tensor, Tensor> operator[](size_t i) const override {
-      if (i >= size())
-        throw std::out_of_range("Index out of range.");
-
-      auto shape_d = data.p->shape | std::views::drop(1);
-      auto shape_t = target.p->shape | std::views::drop(1);
-      Tensor rd(shape_d), rt(shape_t);
-
-      size_t len_d = data.p->num_el / data.p->shape[0];
-      size_t len_t = target.p->num_el / target.p->shape[0];
-
-      std::copy_n(data.p->data.begin() + i * len_d, len_d, rd.p->data.begin());
-      std::copy_n(target.p->data.begin() + i * len_t, len_t, rt.p->data.begin());
-
-      return { rd, rt };
-    }
+    // Returns {sample, target} at index `i`
+    //
+    // Throws `std::out_of_range` if `i >= size()`.
+    std::pair<Tensor, Tensor> operator[](size_t i) const override;
   };
 } // namespace NN::Data

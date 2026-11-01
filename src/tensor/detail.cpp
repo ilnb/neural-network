@@ -1,5 +1,4 @@
 #include "tensor/detail.hpp"
-#include "activations/activations.hpp"
 #include "nn/detail.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>

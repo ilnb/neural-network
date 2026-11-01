@@ -9,9 +9,9 @@
 int main() {
   NN::Sequential model(
       // clang-format off
-    NN::Linear(2, 4),
+    NN::Linear(2, 4, 0),
     NN::ReLU(),
-    NN::Linear(4, 1)
+    NN::Linear(4, 1, 0)
       // clang-format on
   );
 
@@ -22,7 +22,7 @@ int main() {
   NN::Optim::Adam opt(model.params());
 
   for (size_t e = 0; e < 1500; e++) {
-    auto pred = model.forward(x);
+    auto pred = model(x);
     auto loss = NN::Loss::mse(pred, y);
 
     loss.backward();
