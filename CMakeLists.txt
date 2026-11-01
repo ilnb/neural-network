@@ -14,7 +14,8 @@ add_library(neural
   src/regularization/regularization.cpp
   src/loss/loss.cpp
   src/autograd/functions.cpp
-  src/optims.cpp
+  src/optims/optims.cpp
+  src/data/data.cpp
 )
 
 target_compile_features(neural PUBLIC cxx_std_23)
