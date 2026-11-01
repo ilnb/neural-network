@@ -21,6 +21,8 @@ namespace NN {
         throw std::invalid_argument("dropout probability must be in [0, 1).");
     }
 
+    std::vector<Tensor> params() const override { return {}; }
+
     Tensor forward(const Tensor &x) override {
       if (!training or !p)
         return x;
