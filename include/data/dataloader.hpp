@@ -1,5 +1,6 @@
 #pragma once
 
+#include "data/dataset.hpp"
 #include "data/tensor_dataset.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <memory>
 #include <random>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -22,6 +24,7 @@ namespace NN::Data {
     };
 
     std::shared_ptr<const TensorDataset> ds;
+    std::shared_ptr<const Dataset> ds;
     Config cfg;
     std::mt19937 m;
 
@@ -30,13 +33,16 @@ namespace NN::Data {
     DataLoader(TensorDataset &&) = delete;
 
     DataLoader(TensorDataset &&, const Config &) = delete;
-
-    DataLoader(const TensorDataset &ds, const Config &cfg) : ds(std::make_shared<const TensorDataset>(ds)), cfg(cfg), m(cfg.seed) {
+    DataLoader(std::shared_ptr<const Dataset> d, const Config &c) : ds(std::move(d)), cfg(c), m(c.seed) {
       if (cfg.batch_size == 0)
         throw std::invalid_argument("Batch size should be positive.");
-      if (cfg.drop_last && cfg.batch_size > ds.size())
+      if (cfg.drop_last && cfg.batch_size > ds->size())
         throw std::invalid_argument("drop_last with batch_size > dataset size yields no batches.");
     }
+
+    DataLoader(const TensorDataset &d, const Config &c) : DataLoader(std::make_shared<const TensorDataset>(d), c) {}
+
+    DataLoader(const TensorDataset &d) : DataLoader(d, Config{ .batch_size = d.size() }) {}
 
     struct Epoch {
       const DataLoader *dl;
@@ -59,25 +65,8 @@ namespace NN::Data {
         bool operator==(const Iterator &o) const { return i == o.i; }
 
         std::pair<Tensor, Tensor> operator*() const {
-          auto &ds = e->dl->ds;
           const size_t n = std::min(e->dl->cfg.batch_size, e->limit - i);
-
-          auto dshape = ds->data.p->shape;
-          dshape[0] = n;
-          auto tshape = ds->target.p->shape;
-          tshape[0] = n;
-          Tensor rdata(std::move(dshape)), rtarget(std::move(tshape));
-
-          const auto &data = ds->data, &target = ds->target;
-          const size_t rd = data.p->num_el / data.p->shape[0];
-          const size_t rt = target.p->num_el / target.p->shape[0];
-          for (size_t j = 0; j < n; j++) {
-            const size_t src = e->order[i + j];
-            std::copy_n(data.p->data.begin() + src * rd, rd, rdata.p->data.begin() + j * rd);
-            std::copy_n(target.p->data.begin() + src * rt, rt, rtarget.p->data.begin() + j * rt);
-          }
-
-          return { std::move(rdata), std::move(rtarget) };
+          return e->dl->ds->batch(std::span(e->order).subspan(i, n));
         }
 
         Iterator &operator++() {

@@ -2,6 +2,7 @@
 
 #include "data/dataset.hpp"
 #include "tensor/tensor.hpp"
+#include <span>
 #include <stdexcept>
 
 namespace NN::Data {
@@ -23,5 +24,7 @@ namespace NN::Data {
     //
     // Throws `std::out_of_range` if `i >= size()`.
     std::pair<Tensor, Tensor> operator[](size_t i) const override;
+
+    std::pair<Tensor, Tensor> batch(std::span<const size_t> idx) const override;
   };
 } // namespace NN::Data

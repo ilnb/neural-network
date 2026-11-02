@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor/tensor.hpp"
+#include <span>
 #include <utility>
 
 namespace NN::Data {
@@ -8,6 +9,8 @@ namespace NN::Data {
     virtual size_t size() const = 0;
     virtual std::pair<Tensor, Tensor> operator[](size_t i) const = 0;
     virtual ~Dataset() = default;
+
+    virtual std::pair<Tensor, Tensor> batch(std::span<const size_t> idx) const;
 
     struct Iterator {
       const Dataset *ds;
