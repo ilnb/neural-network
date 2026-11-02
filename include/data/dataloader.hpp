@@ -15,24 +15,35 @@
 #include <vector>
 
 namespace NN::Data {
+  // Iterates a `Dataset` in mini-batches.
+  //
+  // Batches come from `Dataset::batch`, so any dataset works; `TensorDataset`
+  // has a contiguous fast path. Every batch has a new leading axis of size
+  // `batch_size`, except the final one when `drop_last` is false.
   struct DataLoader {
+    // Batch iteration options.
     struct Config {
+      // Samples per batch. Must be positive.
       size_t batch_size = 0;
+      // Shuffle the sample order in every epoch.
       bool shuf = false;
+      // Discard a final partial batch.
       bool drop_last = false;
+      // Seed of the shuffling RNG.
       uint32_t seed = 0;
     };
 
-    std::shared_ptr<const TensorDataset> ds;
+    // The dataset, owned through the base so any `Dataset` can be passed.
     std::shared_ptr<const Dataset> ds;
     Config cfg;
+    // RNG used by `epoch()`.
     std::mt19937 m;
 
-    DataLoader(const TensorDataset &ds) : DataLoader(ds, Config{ .batch_size = ds.size() }) {}
-
-    DataLoader(TensorDataset &&) = delete;
-
-    DataLoader(TensorDataset &&, const Config &) = delete;
+    // Takes ownership of `d`.
+    //
+    // Throws `std::invalid_argument` if `cfg.batch_size` is 0, or if
+    // `cfg.drop_last` is set and `cfg.batch_size > d->size()`,
+    // which would yield no batches.
     DataLoader(std::shared_ptr<const Dataset> d, const Config &c) : ds(std::move(d)), cfg(c), m(c.seed) {
       if (cfg.batch_size == 0)
         throw std::invalid_argument("Batch size should be positive.");
@@ -40,10 +51,15 @@ namespace NN::Data {
         throw std::invalid_argument("drop_last with batch_size > dataset size yields no batches.");
     }
 
+    // Copies `d` into the loader.
     DataLoader(const TensorDataset &d, const Config &c) : DataLoader(std::make_shared<const TensorDataset>(d), c) {}
 
+    // One batch containing the whole dataset, in order.
     DataLoader(const TensorDataset &d) : DataLoader(d, Config{ .batch_size = d.size() }) {}
 
+    // One pass over the dataset, yielded as batches.
+    //
+    // Holds the loader by pointer, so the loader must outlive the epoch.
     struct Epoch {
       const DataLoader *dl;
       std::vector<size_t> order;
@@ -85,6 +101,11 @@ namespace NN::Data {
       Iterator end() const { return Iterator(this, limit); }
     };
 
+    // Starts a new epoch over `[0, size())`.
+    //
+    // The order is shuffled when `cfg.shuf`, and each call advances the RNG, so
+    // consecutive shuffled epochs differ. With `seed` fixed, a fresh loader
+    // reproduces the same sequence of orders.
     Epoch epoch() {
       auto order = std::views::iota(0zu, ds->size()) | std::ranges::to<std::vector>();
       if (cfg.shuf)

@@ -5,6 +5,9 @@
 #include <concepts>
 
 namespace NN::Detail {
+  // Applies `f` to every element of `x` in place.
+  //
+  // `f` takes `dtype` or `dtype &` as input.
   template <typename F>
     requires requires(F f, dtype x) {
       { f(x) } -> std::convertible_to<dtype>;
@@ -26,6 +29,9 @@ namespace NN::Detail {
     return map_(r, f);
   }
 
+  // Applies `f` to every element of `x` in place.
+  //
+  // `f` takes index and value as inputs.
   template <typename F>
     requires requires(F f, size_t idx, dtype x) {
       { f(idx, x) } -> std::convertible_to<dtype>;

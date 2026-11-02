@@ -11,11 +11,23 @@
 #include <vector>
 
 namespace NN {
+  // Inverted dropout.
+  //
+  // During training each element is zeroed with probability `p`, and the
+  // survivors are scaled by `1 / (1 - p)` so the expected value is unchanged.
+  // The mask is drawn per element, not per sample. With `p == 0` or outside
+  // training mode the input is returned unchanged. Backward applies the same
+  // mask and scale.
+  //
+  // Throws `std::invalid_argument` if `p` is not finite or lies outside
+  // `[0, 1)`.
   struct Dropout : Module {
     dtype p;
+    // Keep mask of the last forward; emptied once the backward node takes it.
     std::vector<bool> mask;
     std::mt19937 rng;
 
+    // `seed` seeds the mask RNG; the default is nondeterministic.
     Dropout(const dtype p, const uint32_t seed = std::random_device{}()) : p(p), rng(seed) {
       if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
         throw std::invalid_argument("dropout probability must be in [0, 1).");
