@@ -76,9 +76,9 @@ namespace NN::Data {
 
         Iterator(const Epoch *e, size_t i) : e(e), i(i) {}
 
-        bool operator!=(const Iterator &o) const { return i != o.i; }
+        bool operator!=(const Iterator &o) const { return e != o.e or i != o.i; }
 
-        bool operator==(const Iterator &o) const { return i == o.i; }
+        bool operator==(const Iterator &o) const { return e == o.e and i == o.i; }
 
         std::pair<Tensor, Tensor> operator*() const {
           const size_t n = std::min(e->dl->cfg.batch_size, e->limit - i);
