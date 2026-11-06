@@ -1,5 +1,6 @@
 #include "data/dataloader.hpp"
 #include "data/detail.hpp"
+#include "data/split.hpp"
 #include "data/subset.hpp"
 #include "data/tensor_dataset.hpp"
 #include "utils.hpp"
@@ -250,6 +251,48 @@ static void test_subset() {
   check_throws<std::invalid_argument>([&] { (void)s.batch({}); }, "Subset: empty batch throws");
 }
 
+static void test_split() {
+  auto ds = std::make_shared<const Data::TensorDataset>(make_ds());
+
+  auto [tr, te] = Data::train_test_split(ds, { .test_size = 0.4, .seed = 7 });
+  check(tr->size() == 3, "split: train size");
+  check(te->size() == 2, "split: test size");
+
+  auto all = tr->idx;
+  all.insert(all.end(), te->idx.begin(), te->idx.end());
+  std::ranges::sort(all);
+  check(all == std::vector<size_t>{ 0, 1, 2, 3, 4 }, "split: subsets partition the dataset");
+
+  auto [tr2, te2] = Data::train_test_split(ds, { .test_size = 0.4, .seed = 7 });
+  check(tr->idx == tr2->idx and te->idx == te2->idx, "split: same seed reproduces the split");
+
+  auto [tr3, te3] = Data::train_test_split(ds, { .test_size = 0.4, .shuf = false });
+  check(te3->idx == std::vector<size_t>{ 0, 1 }, "split: shuf=false puts the first samples in test");
+  check(tr3->idx == std::vector<size_t>{ 2, 3, 4 }, "split: shuf=false keeps the remaining samples in train");
+
+  // Batches drawn from a test subset match the parent samples.
+  Data::DataLoader dl(*te, { .batch_size = 2 });
+  std::vector<dtype> vals;
+  for (auto [x, y] : dl.epoch())
+    vals.insert(vals.end(), x.p->data.begin(), x.p->data.end());
+  std::vector<dtype> want;
+  for (size_t i : te->idx)
+    want.insert(want.end(), { dtype(i), dtype(i + 1) });
+  check(vals == want, "split: test subset batches match the parent rows");
+
+  // Larger dataset: different seeds should not reproduce the same order.
+  auto big = std::make_shared<const Data::TensorDataset>(mk({ 20, 1 }, std::vector<dtype>(20, 1)), mk({ 20, 1 }, std::vector<dtype>(20, 0)));
+  auto [b1, b1t] = Data::train_test_split(big, { .test_size = 0.25, .seed = 1 });
+  auto [b2, b2t] = Data::train_test_split(big, { .test_size = 0.25, .seed = 2 });
+  check(b1->idx != b2->idx, "split: different seeds give different orders");
+
+  check_throws<std::invalid_argument>([] { (void)Data::train_test_split(nullptr); }, "split: null dataset throws");
+  auto tiny = std::make_shared<const Data::TensorDataset>(mk({ 1, 1 }, { 1 }), mk({ 1, 1 }, { 0 }));
+  check_throws<std::invalid_argument>([&] { (void)Data::train_test_split(tiny, { .test_size = 0.5 }); }, "split: fewer than 2 samples throws");
+  check_throws<std::invalid_argument>([&] { (void)Data::train_test_split(ds, { .test_size = 0 }); }, "split: test_size 0 throws");
+  check_throws<std::invalid_argument>([&] { (void)Data::train_test_split(ds, { .test_size = 1 }); }, "split: test_size 1 throws");
+}
+
 int main() {
   test_dataset_indexing();
   test_dataset_iterator();
@@ -261,6 +304,7 @@ int main() {
   test_generic_dataset();
   test_loader_owns_dataset();
   test_subset();
+  test_split();
   test_errors();
 
   if (failures != 0) {

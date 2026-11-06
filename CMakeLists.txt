@@ -16,6 +16,7 @@ add_library(neural SHARED
   src/autograd/functions.cpp
   src/optims/optims.cpp
   src/data/data.cpp
+  src/data/split.cpp
 )
 
 target_compile_features(neural PUBLIC cxx_std_23)
