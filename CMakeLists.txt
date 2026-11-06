@@ -7,7 +7,7 @@ if(NOT NN_DTYPE MATCHES "^(float|double)$")
   message(FATAL_ERROR "NN_DTYPE must be 'float' or 'double', got ${NN_DTYPE}")
 endif()
 
-add_library(neural
+add_library(neural SHARED
   src/tensor/detail.cpp
   src/tensor/tensor.cpp
   src/activations/activations.cpp
