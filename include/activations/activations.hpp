@@ -1,8 +1,6 @@
 #pragma once
 
 #include "tensor/tensor.hpp"
-#include <algorithm>
-#include <concepts>
 
 namespace NN::Act {
   // Standard sigmoid.
@@ -44,17 +42,5 @@ namespace NN::Act {
     Tensor softmax(const Tensor &x, size_t dim);
 
     Tensor log_softmax(const Tensor &x, size_t dim);
-
-    // Applies `f` to every element of `x` and returns a copy.
-    // The result is a leaf.
-    template <typename F>
-      requires requires(F f, dtype x) {
-        { f(x) } -> std::convertible_to<dtype>;
-      }
-    Tensor map(const Tensor &x, F f) {
-      Tensor r = x.clone();
-      std::ranges::for_each(r.p->data, [f](dtype &v) { v = f(v); });
-      return r;
-    }
   } // namespace Detail
 } // namespace NN::Act

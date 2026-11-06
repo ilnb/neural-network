@@ -94,6 +94,7 @@ Checks: >
   -performance-unnecessary-value-param,
   portability-std-allocator-const,
   readability-*,
+  -readability-identifier-naming,
   -readability-use-std-min-max,
   -readability-math-missing-parentheses,
   -readability-simplify-boolean-expr,

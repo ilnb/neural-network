@@ -1,7 +1,8 @@
 #pragma once
 
-#include "nn/module/base.hpp"
+#include "module/base.hpp"
 #include "tensor/tensor.hpp"
+#include <initializer_list>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -18,6 +19,12 @@ namespace NN {
       (modules.push_back(std::make_unique<std::remove_cvref_t<M>>(std::forward<M>(args))), ...);
     }
 
+    template <typename M>
+    Sequential(std::initializer_list<M> l) {
+      for (auto &&m : l)
+        modules.push_back(std::make_unique<std::remove_cvref_t<M>>(m));
+    }
+
     Module &at(size_t i) { return *modules.at(i); }
 
     const Module &at(size_t i) const { return *modules.at(i); }
@@ -26,7 +33,9 @@ namespace NN {
 
     const Module &operator[](size_t i) const { return *modules[i]; }
 
-    Tensor forward(const Tensor &x) const override {
+    Tensor operator()(const Tensor &x) { return forward(x); }
+
+    Tensor forward(const Tensor &x) override {
       Tensor r = x;
       for (const auto &m : modules)
         r = m->forward(r);
@@ -40,6 +49,13 @@ namespace NN {
         ret.append_range(p);
       }
       return ret;
+    }
+
+    void train(bool mode = true) override {
+      Module::train(mode);
+
+      for (auto &m : modules)
+        m->train(mode);
     }
   };
 } // namespace NN

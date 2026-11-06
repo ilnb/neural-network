@@ -1,5 +1,5 @@
-#include "nn/activations.hpp"
-#include "nn/loss.hpp"
+#include "activations/activations.hpp"
+#include "loss/loss.hpp"
 #include "tensor/tensor.hpp"
 #include "utils.hpp"
 #include <cmath>

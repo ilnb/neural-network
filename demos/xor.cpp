@@ -1,41 +1,55 @@
-#include "nn/loss.hpp"
-#include "nn/module/linear.hpp"
-#include "nn/module/relu.hpp"
-#include "nn/module/sequential.hpp"
+#include "data/dataloader.hpp"
+#include "data/tensor_dataset.hpp"
+#include "loss/loss.hpp"
+#include "module/linear.hpp"
+#include "module/relu.hpp"
+#include "module/sequential.hpp"
 #include "optim/adam.hpp"
 #include "tensor/tensor.hpp"
 #include <print>
 
+using namespace NN;
+
 int main() {
-  NN::Sequential model(
+  Sequential model(
       // clang-format off
-    NN::Linear(2, 4),
-    NN::ReLU(),
-    NN::Linear(4, 1)
+    Linear(2, 4, 0),
+    ReLU(),
+    Linear(4, 1, 0)
       // clang-format on
   );
 
-  NN::Tensor x(4, 2);
+  Tensor x(4, 2);
   x.set_data(0, 0, 0, 1, 1, 0, 1, 1);
-  NN::Tensor y(4, 1);
+  Tensor y(4, 1);
   y.set_data(0, 1, 1, 0);
-  NN::Optim::Adam opt(model.params());
+  Optim::Adam opt(model.params(), { .lr = 0.02 });
 
-  for (size_t e = 0; e < 1500; e++) {
-    auto pred = model.forward(x);
-    auto loss = NN::Loss::mse(pred, y);
+  Data::DataLoader dl(Data::TensorDataset(x, y), { .batch_size = 2, .shuf = true, .seed = 0 });
 
-    loss.backward();
-    opt.step();
-    opt.zero_grad();
+  for (size_t e = 0; e < 500; e++) {
+    model.train();
+    Tensor loss;
+    for (auto [x_b, y_b] : dl.epoch()) {
+      auto pred = model(x_b);
+      loss = Loss::mse(pred, y_b);
 
-    if (e % 100 == 0)
+      loss.backward();
+      opt.step();
+      opt.zero_grad();
+    }
+
+    if (e % 100 == 0) {
+      model.eval();
       std::println("epoch {:>4}: loss = {}", e, loss.item());
+    }
   }
 
-  NN::Tensor test(1, 2);
-  test.set_data(0, 1);
-
-  auto out = model.forward(test);
-  std::println("prediction for {}: {}", test.p->data, out.p->data);
+  model.eval();
+  Tensor test(1, 2);
+  for (const auto &l : std::vector<std::vector<int>>{ { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 } }) {
+    test.set_data(l);
+    auto out = model(test);
+    std::println("prediction for {}: {}", test.p->data, out.p->data);
+  }
 }

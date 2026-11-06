@@ -1,6 +1,6 @@
-#include "nn/regularization.hpp"
+#include "regularization/regularization.hpp"
 #include "autograd/grad_mode.hpp"
-#include "nn/loss.hpp"
+#include "loss/loss.hpp"
 #include "utils.hpp"
 #include <stdexcept>
 

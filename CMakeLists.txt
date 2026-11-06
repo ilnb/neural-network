@@ -7,14 +7,16 @@ if(NOT NN_DTYPE MATCHES "^(float|double)$")
   message(FATAL_ERROR "NN_DTYPE must be 'float' or 'double', got ${NN_DTYPE}")
 endif()
 
-add_library(neural
+add_library(neural SHARED
   src/tensor/detail.cpp
   src/tensor/tensor.cpp
-  src/nn/activations.cpp
-  src/nn/regularization.cpp
-  src/nn/loss.cpp
+  src/activations/activations.cpp
+  src/regularization/regularization.cpp
+  src/loss/loss.cpp
   src/autograd/functions.cpp
-  src/optims.cpp
+  src/optims/optims.cpp
+  src/data/data.cpp
+  src/data/split.cpp
 )
 
 target_compile_features(neural PUBLIC cxx_std_23)
@@ -31,13 +33,17 @@ add_executable(act_test tests/act.cpp)
 add_executable(loss_test tests/loss.cpp)
 add_executable(autograd_test tests/autograd.cpp)
 add_executable(reg_test tests/regularization.cpp)
+add_executable(data_test tests/data.cpp)
 add_executable(demo_sgd demos/sgd.cpp)
 add_executable(demo_xor demos/xor.cpp)
+add_executable(demo_digits_mlp demos/digits_mlp.cpp)
 
 target_link_libraries(tensor_test PRIVATE neural)
 target_link_libraries(act_test PRIVATE neural)
 target_link_libraries(loss_test PRIVATE neural)
 target_link_libraries(autograd_test PRIVATE neural)
 target_link_libraries(reg_test PRIVATE neural)
+target_link_libraries(data_test PRIVATE neural)
 target_link_libraries(demo_sgd PRIVATE neural)
 target_link_libraries(demo_xor PRIVATE neural)
+target_link_libraries(demo_digits_mlp PRIVATE neural)
