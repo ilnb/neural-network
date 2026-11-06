@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data/dataset.hpp"
+#include "data/subset.hpp"
 #include "data/tensor_dataset.hpp"
 #include "tensor/tensor.hpp"
 #include <algorithm>
@@ -56,6 +57,9 @@ namespace NN::Data {
 
     // One batch containing the whole dataset, in order.
     DataLoader(const TensorDataset &d) : DataLoader(d, Config{ .batch_size = d.size() }) {}
+
+    // Batches over a subset, taking ownership of a copy of `s`.
+    DataLoader(Subset s, const Config &c) : DataLoader(std::make_shared<const Subset>(std::move(s)), c) {}
 
     // One pass over the dataset, yielded as batches.
     //

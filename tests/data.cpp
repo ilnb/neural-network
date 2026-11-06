@@ -1,5 +1,6 @@
 #include "data/dataloader.hpp"
 #include "data/detail.hpp"
+#include "data/subset.hpp"
 #include "data/tensor_dataset.hpp"
 #include "utils.hpp"
 #include <algorithm>
@@ -203,6 +204,52 @@ static void test_errors() {
                                       "TensorDataset: mismatched sample axis throws");
 }
 
+static void test_subset() {
+  auto ds = make_ds();
+  auto p = std::make_shared<const Data::TensorDataset>(ds);
+  Data::Subset s(p, { 4, 0, 2 });
+
+  check(s.size() == 3, "Subset: size");
+  check(s.ds == p, "Subset: keeps the parent handle");
+
+  auto [a, b] = s[1];
+  check_data(a, { 0, 1 }, "Subset: operator[] maps through idx");
+  check_data(b, { 0 }, "Subset: operator[] target maps through idx");
+
+  auto [ba, bb] = s.batch(std::vector<size_t>{ 2, 0 });
+  check_shape(ba, { 2, 2 }, "Subset: batch sample shape");
+  check_data(ba, { 2, 3, 4, 5 }, "Subset: batch preserves the requested order");
+  check_data(bb, { 2, 4 }, "Subset: batch preserves target order");
+
+  // Nested subsets compose their mappings.
+  Data::Subset s2(std::make_shared<const Data::Subset>(s), { 2, 0 });
+  check(s2.size() == 2, "Subset: nested size");
+  auto [n0, n0t] = s2[0];
+  auto [n1, n1t] = s2[1];
+  check_data(n0, { 2, 3 }, "Subset: nested index 0");
+  check_data(n1, { 4, 5 }, "Subset: nested index 1");
+  check_data(n0t, { 2 }, "Subset: nested target 0");
+
+  // The DataLoader convenience constructor copies the subset.
+  Data::DataLoader dl(s, { .batch_size = 2 });
+  std::vector<dtype> vals;
+  for (auto [x, y] : dl.epoch())
+    vals.insert(vals.end(), x.p->data.begin(), x.p->data.end());
+  check(vals == std::vector<dtype>{ 4, 5, 0, 1, 2, 3 }, "Subset: DataLoader batches in subset order");
+
+  // A subset keeps its parent alive.
+  auto q = std::make_shared<Data::TensorDataset>(make_ds());
+  Data::Subset owned(q, { 0 });
+  q.reset();
+  check_data(owned[0].first, { 0, 1 }, "Subset: keeps the parent alive");
+
+  check_throws<std::invalid_argument>([] { (void)Data::Subset(std::shared_ptr<const Data::Dataset>(), {}); }, "Subset: null parent throws");
+  check_throws<std::out_of_range>([&] { (void)Data::Subset(p, { 5 }); }, "Subset: index >= parent size throws");
+  check_throws<std::out_of_range>([&] { (void)s[3]; }, "Subset: operator[] out of range throws");
+  check_throws<std::out_of_range>([&] { (void)s.batch(std::vector<size_t>{ 3 }); }, "Subset: batch position out of range throws");
+  check_throws<std::invalid_argument>([&] { (void)s.batch({}); }, "Subset: empty batch throws");
+}
+
 int main() {
   test_dataset_indexing();
   test_dataset_iterator();
@@ -213,6 +260,7 @@ int main() {
   test_shuffle();
   test_generic_dataset();
   test_loader_owns_dataset();
+  test_subset();
   test_errors();
 
   if (failures != 0) {
