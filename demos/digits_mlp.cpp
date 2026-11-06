@@ -4,6 +4,7 @@
 #include "data/split.hpp"
 #include "data/tensor_dataset.hpp"
 #include "loss/loss.hpp"
+#include "module/batchnorm1d.hpp"
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
@@ -109,15 +110,17 @@ int main() {
   Sequential model(
       // clang-format off
     Linear(64, 16, 0),
+    BatchNorm1d(16),
     ReLU(),
     Linear(16, 16, 0),
+    BatchNorm1d(16),
     ReLU(),
     Linear(16, 10, 0),
     Softmax(1)
       // clang-format on
   );
 
-  Optim::Adam opt(model.params(), { .lr = 0.001 });
+  Optim::Adam opt(model.params(), { .lr = 0.01 });
 
   Data::TensorDataset ds(X, Y);
 
@@ -125,7 +128,7 @@ int main() {
 
   Data::DataLoader loader(train_set, { .batch_size = 32, .shuf = true, .seed = 0 });
 
-  for (size_t e = 0; e < 500; e++) {
+  for (size_t e = 0; e < 1000; e++) {
     model.train();
     for (auto [x_b, y_b] : loader.epoch()) {
       auto pred = model(x_b);

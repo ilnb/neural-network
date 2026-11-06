@@ -4,6 +4,7 @@
 #include <vector>
 
 namespace NN {
+  // Shared base for modules.
   struct Module {
     virtual ~Module() = default;
     virtual Tensor forward(const Tensor &x) = 0;
