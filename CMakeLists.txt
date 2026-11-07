@@ -21,6 +21,12 @@ add_library(neural SHARED
   src/module/conv.cpp
 )
 
+add_compile_options(
+  -Wall
+  -Wextra
+  -Wunused
+)
+
 target_compile_features(neural PUBLIC cxx_std_23)
 
 target_include_directories(neural

@@ -1,3 +1,4 @@
+#include "data/dataloader.hpp"
 #include "data/dataset.hpp"
 #include "data/detail.hpp"
 #include "data/tensor_dataset.hpp"
@@ -9,6 +10,15 @@
 #include <vector>
 
 namespace NN::Data {
+  // Kept out of line: inlining the virtual `size()` call into the DataLoader
+  // constructors makes GCC 16 emit a false `-Warray-bounds`.
+  void DataLoader::check() const {
+    if (cfg.batch_size == 0)
+      throw std::invalid_argument("Batch size should be positive.");
+    if (cfg.drop_last && cfg.batch_size > ds->size())
+      throw std::invalid_argument("drop_last with batch_size > dataset size yields no batches.");
+  }
+
   namespace Detail {
     Tensor stack(const std::vector<Tensor> &ts) {
       if (ts.empty())

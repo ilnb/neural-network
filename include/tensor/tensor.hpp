@@ -237,7 +237,7 @@ namespace NN {
       auto it = std::ranges::begin(r); // supports more types
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++) {
-        if (it[i] >= self.p->shape[i])
+        if (it[i] < 0 or static_cast<size_t>(it[i]) >= self.p->shape[i])
           throw std::out_of_range("Tensor index out of bounds.");
         offset += it[i] * self.p->strides[i];
       }

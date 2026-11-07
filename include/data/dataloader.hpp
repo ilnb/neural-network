@@ -46,12 +46,7 @@ namespace NN::Data {
     // Throws `std::invalid_argument` if `cfg.batch_size` is 0, or if
     // `cfg.drop_last` is set and `cfg.batch_size > d->size()`,
     // which would yield no batches.
-    DataLoader(std::shared_ptr<const Dataset> d, const Config &c) : ds(std::move(d)), cfg(c), m(c.seed) {
-      if (cfg.batch_size == 0)
-        throw std::invalid_argument("Batch size should be positive.");
-      if (cfg.drop_last && cfg.batch_size > ds->size())
-        throw std::invalid_argument("drop_last with batch_size > dataset size yields no batches.");
-    }
+    DataLoader(std::shared_ptr<const Dataset> d, const Config &c) : ds(std::move(d)), cfg(c), m(c.seed) { check(); }
 
     // Copies `d` into the loader.
     DataLoader(const TensorDataset &d, const Config &c) : DataLoader(std::make_shared<const TensorDataset>(d), c) {}
@@ -117,5 +112,9 @@ namespace NN::Data {
         std::ranges::shuffle(order, m);
       return Epoch(this, std::move(order));
     }
+
+  private:
+    // Throws unless the dataset can be split into batches of `cfg.batch_size`.
+    void check() const;
   };
 } // namespace NN::Data
