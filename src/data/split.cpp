@@ -34,5 +34,4 @@ namespace NN::Data {
     auto test = std::make_shared<Subset>(std::move(ds), std::move(test_idx));
     return { std::move(train), std::move(test) };
   }
-
 } // namespace NN::Data

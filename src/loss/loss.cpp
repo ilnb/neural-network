@@ -103,7 +103,8 @@ namespace NN::Loss {
           auto &xd = dx.p->data;
           auto &td = at->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
-            xd[i] = f * td[i] / pdata[i];
+            if (td[i] != 0)
+              xd[i] = f * td[i] / pdata[i];
           Autograd::accumulate(*ap, dx);
         }
         if (at->requires_grad) {

@@ -1,4 +1,5 @@
 #include "loss/loss.hpp"
+#include "activations/activations.hpp"
 #include "utils.hpp"
 
 #include <cmath>
@@ -66,6 +67,25 @@ static void test_ce_binary_matches_bce() {
 static void test_ce_edges() {
   check(std::isinf(Loss::ce(mk({ 1, 2 }, { 0, 1 }), mk({ 1, 2 }, { 1, 0 }), 1).item()), "ce: p=0 with target mass -> inf");
   check_close(Loss::ce(mk({ 1, 2 }, { 0, 1 }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0, 0, "ce: p=0 with y=0 is ignored");
+}
+
+static void test_ce_zero_target_grad() {
+  // A zero target whose probability underflowed to 0 must not produce 0/0.
+  const Tensor target = mk({ 1, 2 }, { 1, 0 });
+
+  Tensor pred = mk_grad({ 1, 2 }, { 1, 0 });
+  Loss::ce(pred, target).backward();
+  const auto &g = pred.p->grad->p->data;
+  check_close(g[0], -1, 1e-6f, "ce: non-zero target still contributes");
+  check_close(g[1], 0, 0, "ce: zero target with p=0 has zero gradient");
+
+  // Through softmax, saturated logits give dlogits = p - t = 0, not NaN.
+  Tensor logits = mk_grad({ 1, 2 }, { 1000, -1000 });
+  Loss::ce(NN::Act::softmax(logits, 1), target).backward();
+  const auto &lg = logits.p->grad->p->data;
+  check_close(lg[0], 0, 0, "ce: saturated true-class dlogit is zero");
+  check_close(lg[1], 0, 0, "ce: saturated other-class dlogit is zero");
+  check(not std::isnan(lg[0]) and not std::isnan(lg[1]), "ce: saturated gradient is not NaN");
 }
 
 static void test_validation_order() {
@@ -158,6 +178,7 @@ int main() {
   test_ce_soft_labels();
   test_ce_binary_matches_bce();
   test_ce_edges();
+  test_ce_zero_target_grad();
   test_errors();
   test_validation_order();
   test_scalar_results();
