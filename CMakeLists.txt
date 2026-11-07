@@ -17,6 +17,7 @@ add_library(neural SHARED
   src/optims/optims.cpp
   src/data/data.cpp
   src/data/split.cpp
+  src/module/batchnorm.cpp
   src/module/conv.cpp
 )
 
@@ -35,7 +36,7 @@ add_executable(loss_test tests/loss.cpp)
 add_executable(autograd_test tests/autograd.cpp)
 add_executable(reg_test tests/regularization.cpp)
 add_executable(data_test tests/data.cpp)
-add_executable(batchnorm_test tests/batchnorm.cpp)
+add_executable(bn_test tests/batchnorm.cpp)
 add_executable(conv_test tests/conv.cpp)
 add_executable(demo_sgd demos/sgd.cpp)
 add_executable(demo_xor demos/xor.cpp)
@@ -48,7 +49,7 @@ target_link_libraries(loss_test PRIVATE neural)
 target_link_libraries(autograd_test PRIVATE neural)
 target_link_libraries(reg_test PRIVATE neural)
 target_link_libraries(data_test PRIVATE neural)
-target_link_libraries(batchnorm_test PRIVATE neural)
+target_link_libraries(bn_test PRIVATE neural)
 target_link_libraries(conv_test PRIVATE neural)
 target_link_libraries(demo_sgd PRIVATE neural)
 target_link_libraries(demo_xor PRIVATE neural)
