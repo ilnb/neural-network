@@ -3,27 +3,31 @@
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
+
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
 
 namespace NN::Reg {
   Tensor l1(const Tensor &weight) {
     auto r = Detail::l1(weight);
 
     if (Autograd::grad_enabled and weight.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { weight.p };
       fn->backward = [ap = weight.p](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
         Tensor dx(ap->shape);
+        auto &xd = dx.p->data, &zd = dz.p->data;
         const auto &w = ap->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++) {
           const dtype sign = (w[i] > 0) - (w[i] < 0);
-          dx.p->data[i] = dz.p->data[0] * sign;
+          xd[i] = zd[0] * sign;
         }
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -36,16 +40,17 @@ namespace NN::Reg {
     auto r = Detail::l2(weight);
 
     if (Autograd::grad_enabled and weight.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { weight.p };
       fn->backward = [ap = weight.p](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
         Tensor dx(ap->shape);
+        auto &xd = dx.p->data, &zd = dz.p->data;
         const auto &w = ap->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++)
-          dx.p->data[i] = dz.p->data[0] * w[i];
-        Autograd::accumulate(*ap, dx);
+          xd[i] = zd[0] * w[i];
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -58,18 +63,19 @@ namespace NN::Reg {
     auto r = Detail::elastic_net(weight, alpha);
 
     if (Autograd::grad_enabled and weight.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { weight.p };
       fn->backward = [ap = weight.p, alpha](const Tensor &dz) {
         if (!ap->requires_grad)
           return;
         Tensor dx(ap->shape);
+        auto &xd = dx.p->data, &zd = dz.p->data;
         const auto &w = ap->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++) {
           const dtype sign = (w[i] > 0) - (w[i] < 0);
-          dx.p->data[i] = dz.p->data[0] * (alpha * sign + (dtype(1) - alpha) * w[i]);
+          xd[i] = zd[0] * (alpha * sign + (dtype(1) - alpha) * w[i]);
         }
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;

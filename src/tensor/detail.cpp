@@ -1,6 +1,7 @@
 #include "tensor/detail.hpp"
 #include "nn/detail.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>

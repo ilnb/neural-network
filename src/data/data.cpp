@@ -2,6 +2,7 @@
 #include "data/detail.hpp"
 #include "data/tensor_dataset.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <ranges>
 #include <stdexcept>

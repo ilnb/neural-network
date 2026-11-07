@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor/tensor.hpp"
+
 #include <span>
 #include <utility>
 

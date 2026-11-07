@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor/shape.hpp"
+
 #include <array>
 #include <concepts>
 #include <initializer_list>
@@ -150,8 +151,8 @@ namespace NN {
     // Convenience constructor, directly takes values.
     template <typename... Args>
       requires(sizeof...(Args) > 1) and (std::integral<Args> and ...)
-    explicit Tensor(Args... dims) : p(std::make_shared<Impl>()) {
-      p->shape = std::vector{ static_cast<size_t>(dims)... };
+    explicit Tensor(Args... args) : p(std::make_shared<Impl>()) {
+      p->shape = std::vector{ static_cast<size_t>(args)... };
       const size_t n = Detail::checked_num_el(p->shape);
       finalize_shape(n, false);
     }
@@ -175,8 +176,8 @@ namespace NN {
     // Convenience form of `set_data`.
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
-    Tensor &set_data(Args... vals) {
-      return set_data(std::array<dtype, sizeof...(Args)>{ static_cast<dtype>(vals)... });
+    Tensor &set_data(Args... args) {
+      return set_data(std::array<dtype, sizeof...(Args)>{ static_cast<dtype>(args)... });
     }
 
     // Takes data as an initializer_list
@@ -208,8 +209,8 @@ namespace NN {
     // Convenience form of `set_dims`.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor &set_dims(Args... vals) {
-      return set_dims(std::vector<size_t>{ static_cast<size_t>(vals)... });
+    Tensor &set_dims(Args... args) {
+      return set_dims(std::vector<size_t>{ static_cast<size_t>(args)... });
     }
 
     // Same as the range overload, taking a shape vector.
@@ -256,8 +257,8 @@ namespace NN {
     // Element access with bounds checking.
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
-    decltype(auto) at(this Self &&self, Args... idx) {
-      return self.at(std::array<size_t, sizeof...(Args)>{ static_cast<size_t>(idx)... });
+    decltype(auto) at(this Self &&self, Args... args) {
+      return self.at(std::array<size_t, sizeof...(Args)>{ static_cast<size_t>(args)... });
     }
 
     // Element access without bounds checking.
@@ -266,12 +267,12 @@ namespace NN {
     // differs from the rank. Indices must be in range.
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
-    decltype(auto) operator[](this Self &&self, Args... idx) {
+    decltype(auto) operator[](this Self &&self, Args... args) {
       if (self.empty())
         throw std::invalid_argument("Empty tensor.");
-      if (sizeof...(idx) != self.p->shape.size())
+      if (sizeof...(args) != self.p->shape.size())
         throw std::invalid_argument("Number of indices doesnt match tensor rank.");
-      std::array<size_t, sizeof...(Args)> tmp{ static_cast<size_t>(idx)... };
+      std::array<size_t, sizeof...(Args)> tmp{ static_cast<size_t>(args)... };
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++)
         offset += tmp[i] * self.p->strides[i];
@@ -296,8 +297,8 @@ namespace NN {
     // Takes the new shape as separate arguments.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor reshape(Args... dims) const {
-      return reshape(std::vector{ static_cast<size_t>(dims)... });
+    Tensor reshape(Args... args) const {
+      return reshape(std::vector{ static_cast<size_t>(args)... });
     }
 
     Tensor reshape(std::vector<size_t> &&v) const;

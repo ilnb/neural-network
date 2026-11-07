@@ -3,6 +3,7 @@
 // Shared testing utilities.
 
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <functional>

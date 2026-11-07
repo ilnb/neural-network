@@ -6,6 +6,7 @@
 #include "module/sequential.hpp"
 #include "optim/sgd.hpp"
 #include "utils.hpp"
+
 #include <cmath>
 #include <limits>
 #include <print>

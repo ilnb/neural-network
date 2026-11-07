@@ -1,8 +1,6 @@
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
-#include "data/dataset.hpp"
 #include "data/split.hpp"
-#include "data/tensor_dataset.hpp"
 #include "loss/loss.hpp"
 #include "module/batchnorm1d.hpp"
 #include "module/linear.hpp"
@@ -10,7 +8,7 @@
 #include "module/sequential.hpp"
 #include "module/softmax.hpp"
 #include "optim/adam.hpp"
-#include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <charconv>
 #include <fstream>

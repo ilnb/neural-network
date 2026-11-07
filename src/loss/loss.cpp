@@ -3,17 +3,22 @@
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
+
 #include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
+
 namespace NN::Loss {
+
   Tensor mse(const Tensor &pred, const Tensor &target) {
     auto r = Detail::mse(pred, target);
 
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
@@ -22,14 +27,16 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
-            dx.p->data[i] = f * (pdata[i] - tdata[i]);
+            xd[i] = f * (pdata[i] - tdata[i]);
           Autograd::accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &tdd = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
-            dt.p->data[i] = -f * (pdata[i] - tdata[i]);
+            tdd[i] = -f * (pdata[i] - tdata[i]);
           Autograd::accumulate(*at, dt);
         }
       };
@@ -42,8 +49,10 @@ namespace NN::Loss {
 
   Tensor bce(const Tensor &pred, const Tensor &target) {
     auto r = Detail::bce(pred, target);
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+
+    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
@@ -52,19 +61,21 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++) {
             const dtype p = pdata[i], t = tdata[i];
             if (p != t)
-              dx.p->data[i] = f * (p - t) / (p * (1 - p));
+              xd[i] = f * (p - t) / (p * (1 - p));
           }
           Autograd::accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &td = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++) {
             const dtype p = pdata[i];
             if (p != 0 and p != 1)
-              dt.p->data[i] = f * (std::log(1 - p) - std::log(p));
+              td[i] = f * (std::log(1 - p) - std::log(p));
           }
           Autograd::accumulate(*at, dt);
         }
@@ -79,8 +90,9 @@ namespace NN::Loss {
   Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
     auto r = Detail::ce(pred, target, dim);
 
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {
         const dtype f = -dz.p->data[0] * static_cast<dtype>(ap->shape[dim]) / ap->num_el;
@@ -88,14 +100,17 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
+          auto &td = at->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
-            dx.p->data[i] = f * at->data[i] / pdata[i];
+            xd[i] = f * td[i] / pdata[i];
           Autograd::accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &td = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
-            dt.p->data[i] = f * std::log(pdata[i]);
+            td[i] = f * std::log(pdata[i]);
           Autograd::accumulate(*at, dt);
         }
       };
