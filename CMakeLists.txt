@@ -19,6 +19,7 @@ add_library(neural SHARED
   src/data/split.cpp
   src/module/batchnorm.cpp
   src/module/conv.cpp
+  src/module/maxpool2d.cpp
 )
 
 add_compile_options(
