@@ -110,10 +110,10 @@ int main() {
 
   Sequential model(
       // clang-format off
-    Conv2d(1, 8, 3, 3, { .padding = 1, .seed = 0 }),
+    Conv2d(1, 8, 3, { .padding = 1, .seed = 0 }),
     BatchNorm2d(8),
     ReLU(),
-    Conv2d(8, 16, 3, 3, { .padding = 1, .seed = 0 }),
+    Conv2d(8, 16, 3, { .padding = 1, .seed = 0 }),
     BatchNorm2d(16),
     ReLU(),
     Flatten(),

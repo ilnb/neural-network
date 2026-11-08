@@ -36,7 +36,11 @@ namespace NN {
         b.set_requires_grad(true);
     }
 
-    Conv2d(size_t in, size_t out, size_t kernel_h, size_t kernel_w) : Conv2d(in, out, kernel_h, kernel_w, Config{}) {}
+    Conv2d(size_t in, size_t out, size_t kernel, const Config &c) : Conv2d(in, out, kernel, kernel, c) {}
+
+    Conv2d(size_t in, size_t out, size_t kernel_h, size_t kernel_w) : Conv2d(in, out, kernel_h, kernel_w, {}) {}
+
+    Conv2d(size_t in, size_t out, size_t kernel) : Conv2d(in, out, kernel, kernel) {}
 
     Tensor forward(const Tensor &x) override;
 
