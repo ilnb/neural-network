@@ -2,6 +2,7 @@
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
 #include "loss/loss.hpp"
+#include "module/batchnorm2d.hpp"
 #include "module/conv2d.hpp"
 #include "module/flatten.hpp"
 #include "module/linear.hpp"
@@ -109,8 +110,10 @@ int main() {
   Sequential model(
       // clang-format off
     Conv2d(1, 8, 3, 3, { .padding = 1, .seed = 0 }),
+    BatchNorm2d(8),
     ReLU(),
     Conv2d(8, 16, 3, 3, { .padding = 1, .seed = 0 }),
+    BatchNorm2d(16),
     ReLU(),
     Flatten(),
     Linear(16 * 8 * 8, 10, 0),
@@ -118,7 +121,7 @@ int main() {
       // clang-format on
   );
 
-  Optim::Adam opt(model.params(), { .lr = 0.001 });
+  Optim::Adam opt(model.params(), { .lr = 0.01 });
 
   Data::TensorDataset ds(X, Y);
 
@@ -126,7 +129,7 @@ int main() {
 
   Data::DataLoader loader(train_set, { .batch_size = 32, .shuf = true, .seed = 0 });
 
-  for (size_t e = 0; e < 50; e++) {
+  for (size_t e = 0; e < 20; e++) {
     model.train();
     for (auto [x_b, y_b] : loader.epoch()) {
       auto pred = model(x_b);

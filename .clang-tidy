@@ -47,6 +47,7 @@ FormatStyle: file
 Checks: >
   -*,
   bugprone-*,
+  -bugprone-exception-escape,
   -bugprone-multi-level-implicit-pointer-conversion,
   -bugprone-implicit-widening-of-multiplication-result,
   -bugprone-empty-catch,
