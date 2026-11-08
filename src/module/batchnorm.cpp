@@ -2,6 +2,7 @@
 #include "autograd/grad_mode.hpp"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -9,15 +10,16 @@
 namespace NN {
   Tensor BatchNorm::forward(const Tensor &x) {
     if (x.empty())
-      throw std::invalid_argument("Empty tensor.");
-    if (!accepts(x.p->shape.size()))
+      throw std::invalid_argument("BatchNorm::forward: empty tensor.");
+    auto &p = x.p;
+    if (!accepts(p->shape.size()))
       throw std::invalid_argument(expected());
-    if (x.p->shape[1] != channels)
-      throw std::invalid_argument("Wrong number of channels on axis 1.");
+    if (p->shape[1] != channels)
+      throw std::invalid_argument(std::format("BatchNorm::forward: wrong number of channels on axis 1 (shape[1] = {}, channels = {}).", p->shape[1], channels));
 
-    auto &xd = x.p->data;
-    const size_t xn = x.p->num_el;
-    const auto &shape = x.p->shape;
+    auto &xd = p->data;
+    const size_t xn = p->num_el;
+    const auto &shape = p->shape;
     const size_t C = channels;
     // Elements per (sample, channel): 1 for {N, C}, L for {N, C, L}, H * W
     // for {N, C, H, W}.

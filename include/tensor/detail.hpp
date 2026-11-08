@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <format>
 
 // Raw tensor kernels.
 //
@@ -87,11 +88,11 @@ namespace NN::Detail {
     requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
   Tensor reduce(const Tensor &t, size_t dim, dtype init, Op op) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("reduce: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (dim >= n)
-      throw std::out_of_range("Out of bounds axis.");
+      throw std::out_of_range(std::format("reduce: dim {} is out of bounds {}", dim, n));
 
     std::vector<size_t> new_size;
     new_size.reserve(n - 1);
@@ -138,11 +139,11 @@ namespace NN::Detail {
     requires std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, bool> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
   std::pair<Tensor, std::vector<size_t>> cmp(const Tensor &t, size_t dim, Op op) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("cmp: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (dim >= n)
-      throw std::out_of_range("Out of bounds axis.");
+      throw std::out_of_range(std::format("cmp: dim {} is out of bounds {}", dim, n));
 
     std::vector<size_t> new_size;
     new_size.reserve(n - 1);

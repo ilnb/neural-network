@@ -5,6 +5,7 @@
 #include "tensor/tensor.hpp"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <stdexcept>
 
@@ -87,21 +88,21 @@ namespace NN::Reg {
   namespace Detail {
     Tensor l1(const Tensor &weight) {
       if (weight.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("l1: empty tensor.");
       return Tensor(std::ranges::fold_left(weight.p->data, dtype(0), [](dtype x, dtype w) { return x + std::abs(w); }));
     }
 
     Tensor l2(const Tensor &weight) {
       if (weight.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("l2: empty tensor.");
       return Tensor(dtype(0.5) * std::ranges::fold_left(weight.p->data, dtype(0), [](dtype x, dtype w) { return x + w * w; }));
     }
 
     Tensor elastic_net(const Tensor &weight, const dtype alpha) {
       if (weight.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("elastic_net: empty tensor.");
       if (alpha < 0 or 1 < alpha)
-        throw std::invalid_argument("`alpha` should be in [0, 1].");
+        throw std::invalid_argument(std::format("elastic_net: alpha {} should be in [0, 1].", alpha));
       return Tensor(std::ranges::fold_left(weight.p->data, dtype(0), [alpha](dtype x, dtype w) { return x + alpha * std::abs(w) + (dtype(1) - alpha) * dtype(0.5) * w * w; }));
     }
   } // namespace Detail

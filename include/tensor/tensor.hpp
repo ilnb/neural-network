@@ -4,6 +4,7 @@
 
 #include <array>
 #include <concepts>
+#include <format>
 #include <initializer_list>
 #include <memory>
 #include <ranges>
@@ -167,7 +168,7 @@ namespace NN {
     Tensor &set_data(R &&r) {
       check_mutable();
       if (std::ranges::size(r) != Detail::checked_num_el(p->shape))
-        throw std::invalid_argument("Data ranges are of different size.");
+        throw std::invalid_argument("set_data: data ranges are of different size.");
       p->data.assign_range(r);
       p->num_el = p->data.size();
       return *this;
@@ -231,14 +232,14 @@ namespace NN {
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
     decltype(auto) at(this Self &&self, R &&r) {
       if (self.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("at: empty tensor.");
       if (std::ranges::size(r) != self.p->shape.size())
-        throw std::invalid_argument("Number of indices doesnt match tensor rank.");
+        throw std::invalid_argument("at: number of indices doesnt match tensor rank.");
       auto it = std::ranges::begin(r); // supports more types
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++) {
         if (it[i] < 0 or static_cast<size_t>(it[i]) >= self.p->shape[i])
-          throw std::out_of_range("Tensor index out of bounds.");
+          throw std::out_of_range(std::format("at: idx {} is out of bounds {}.", it[i], self.p->shape[i]));
         offset += it[i] * self.p->strides[i];
       }
       if constexpr (std::is_const_v<std::remove_reference_t<Self>>)
@@ -269,9 +270,9 @@ namespace NN {
       requires(std::integral<Args> and ...)
     decltype(auto) operator[](this Self &&self, Args... args) {
       if (self.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("operator[]: empty tensor.");
       if (sizeof...(args) != self.p->shape.size())
-        throw std::invalid_argument("Number of indices doesnt match tensor rank.");
+        throw std::invalid_argument("operator[]: Number of indices doesnt match tensor rank.");
       std::array<size_t, sizeof...(Args)> tmp{ static_cast<size_t>(args)... };
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++)

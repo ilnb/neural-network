@@ -10,7 +10,7 @@ namespace NN {
   struct Flatten : Module {
     Tensor forward(const Tensor &x) override {
       if (x.empty() || x.p->shape.empty())
-        throw std::invalid_argument("Non-empty batched tensor expected.");
+        throw std::invalid_argument("Flatten::forward: non-empty batched tensor expected.");
 
       const size_t batch = x.p->shape[0];
       return x.reshape(batch, x.p->num_el / batch);

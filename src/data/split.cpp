@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <memory>
 #include <random>
 #include <ranges>
@@ -11,13 +12,13 @@
 namespace NN::Data {
   std::pair<std::shared_ptr<Subset>, std::shared_ptr<Subset>> train_test_split(std::shared_ptr<const Dataset> ds, const SplitConfig &cfg) {
     if (!ds)
-      throw std::invalid_argument("train_test_split needs a dataset.");
+      throw std::invalid_argument("train_test_split: ds is null.");
 
     const size_t N = ds->size();
     if (N < 2)
-      throw std::invalid_argument("train_test_split needs at least 2 samples.");
-    if (!(cfg.test_size > 0 and cfg.test_size < 1))
-      throw std::invalid_argument("test_size should be in (0, 1).");
+      throw std::invalid_argument("train_test_split: sample count < 2.");
+    if (cfg.test_size <= 0 or 1 <= cfg.test_size)
+      throw std::invalid_argument(std::format("train_test_split: test_size {} should be in (0, 1).", cfg.test_size));
 
     const size_t n_test = std::clamp<size_t>(static_cast<size_t>(std::llround(N * cfg.test_size)), 1, N - 1);
 

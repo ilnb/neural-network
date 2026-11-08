@@ -6,6 +6,7 @@
 
 #include "tensor/tensor.hpp"
 #include <cmath>
+#include <format>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -31,7 +32,7 @@ namespace NN {
     // `seed` seeds the mask RNG; the default is nondeterministic.
     Dropout(const dtype p, const uint32_t seed = std::random_device{}()) : p(p), rng(seed) {
       if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
-        throw std::invalid_argument("dropout probability must be in [0, 1).");
+        throw std::invalid_argument(std::format("Dropout: probability {} must be in [0, 1)).", p));
     }
 
     std::vector<Tensor> params() const override { return {}; }

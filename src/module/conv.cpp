@@ -4,6 +4,7 @@
 #include "module/conv2d.hpp"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -13,12 +14,12 @@ using NN::Autograd::GradFn, NN::Autograd::accumulate;
 namespace NN {
   Tensor Conv2d::forward(const Tensor &x) {
     if (x.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("Conv2d::forward: empty tensor.");
     const auto &shape = x.p->shape;
     if (shape.size() != 4)
-      throw std::invalid_argument("Conv2d expects a 4D NCHW tensor.");
+      throw std::invalid_argument("Conv2d::forward: 4D NCHW tensor expected.");
     if (shape[1] != in_channels)
-      throw std::invalid_argument("Conv2d input channel mismatch.");
+      throw std::invalid_argument(std::format("Conv2d::forward: input channel mismatch (shape[1] = {}, in_channels = {}).", shape[1], in_channels));
 
     size_t N = shape[0], H = shape[2], W = shape[3];
     size_t S = cfg.stride, P = cfg.padding, D = cfg.dilation;

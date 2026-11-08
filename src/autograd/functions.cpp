@@ -3,6 +3,7 @@
 #include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
 
+#include <format>
 #include <functional>
 #include <memory>
 #include <ranges>
@@ -18,11 +19,11 @@ namespace NN::Autograd {
 
     const size_t n = gs.size();
     if (shape.size() > n)
-      throw std::invalid_argument("sum_to_shape: target rank exceeds gradient rank.");
+      throw std::invalid_argument(std::format("sum_to_shape: target rank {} exceeds source rank {}.", shape.size(), n));
     const size_t off = n - shape.size();
     for (size_t i = 0; i < shape.size(); i++)
       if (shape[i] != 1 and shape[i] != gs[off + i])
-        throw std::invalid_argument("sum_to_shape: target doesn't broadcast to gradient shape.");
+        throw std::invalid_argument(std::format("sum_to_shape: target shape {} is incompatible with source shape {}.", shape, gs));
 
     Tensor out(shape);
 
@@ -53,9 +54,9 @@ namespace NN::Autograd {
 
   void accumulate(Impl &p, const Tensor &g) {
     if (!g.p)
-      throw std::invalid_argument("Empty gradient.");
+      throw std::invalid_argument("accumulate: empty gradient.");
     if (p.shape != g.p->shape)
-      throw std::invalid_argument("Incompatible shape.");
+      throw std::invalid_argument(std::format("accumulate: shapes {} and {} are incompatible.", p.shape, g.p->shape));
     if (!p.grad)
       p.grad = std::make_shared<Tensor>(g.clone());
     else {
@@ -69,9 +70,9 @@ namespace NN::Autograd {
 
   void backward(const Tensor &root) {
     if (root.empty() or !root.p->requires_grad)
-      throw std::logic_error("backward on a tensor that doesnt require grad.");
+      throw std::logic_error("backward: not an autograd tensor.");
     if (root.p->num_el != 1)
-      throw std::invalid_argument("backward requires a scalar root.");
+      throw std::invalid_argument("backward: requires a scalar root.");
 
     NoGradGuard g; // closure must not record
 
@@ -96,7 +97,7 @@ namespace NN::Autograd {
         continue;
       if (v->grad) {
         if (!v->grad_fn->backward)
-          throw std::logic_error("Requires backward rule, not present.");
+          throw std::logic_error("backward: absent backward rule.");
         v->grad_fn->backward(*v->grad);
       }
       v->grad.reset();

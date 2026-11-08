@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <vector>
 
 namespace NN::Detail {
@@ -15,13 +16,13 @@ namespace NN::Detail {
 
   Tensor sqrt(const Tensor &t) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("sqrt: empty tensor.");
     return map(t, [](auto x) { return std::sqrt(x); });
   }
 
   Tensor sum(const Tensor &t) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("sum: empty tensor.");
     return Tensor(std::ranges::fold_left(t.p->data, 0, std::plus<>()));
   }
 
@@ -29,12 +30,12 @@ namespace NN::Detail {
 
   Tensor expand(const Tensor &t, size_t dim, size_t size) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("expand: empty tensor.");
     auto &p = t.p;
     const auto &shape = p->shape;
     const size_t n = shape.size();
     if (dim > n)
-      throw std::out_of_range("Out of bounds axis.");
+      throw std::out_of_range(std::format("expand: dim {} is out of bounds {}.", dim, n));
 
     size_t inner = 1;
     for (size_t i = dim; i < n; i++)
@@ -62,10 +63,10 @@ namespace NN::Detail {
 
   Tensor reshape(const Tensor &t, std::vector<size_t> &&v) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("reshape: empty tensor.");
     auto &p = t.p;
     if (p->num_el != checked_num_el(v))
-      throw std::invalid_argument("Incompatible target shape.");
+      throw std::invalid_argument(std::format("reduce: cant reshape {} to {}", t.p->shape, v));
 
     Tensor x(std::move(v));
     x.p->data = p->data;
@@ -74,13 +75,13 @@ namespace NN::Detail {
 
   Tensor permute(const Tensor &t, const std::vector<size_t> &v) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("permute: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (v.size() != n)
-      throw std::invalid_argument("`perm` needs to be of the same size.");
+      throw std::invalid_argument(std::format("permute: v of size {} needs to be of the size {}.", v.size(), n));
     if (not std::ranges::is_permutation(v, std::views::iota(0uz, n)))
-      throw std::invalid_argument("`perm` is not a permutation.");
+      throw std::invalid_argument(std::format("permute: v {} is not a permutation.", v));
 
     std::vector<size_t> new_shape(n);
     for (size_t i = 0; i < n; i++)
@@ -102,11 +103,11 @@ namespace NN::Detail {
 
   Tensor transpose(const Tensor &t) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("transpose: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (n < 2)
-      throw std::domain_error("Tensor needs to be rank >= 2 for transpose.");
+      throw std::domain_error("tensor: tensor needs to be of rank >= 2.");
 
     auto perm = std::views::iota(0zu, n) | std::ranges::to<std::vector>();
     std::swap(perm[n - 2], perm[n - 1]);
@@ -115,15 +116,15 @@ namespace NN::Detail {
 
   Tensor cat(const Tensor &t, const Tensor &b, size_t dim) {
     if (t.empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("cat: empty tensor.");
     auto &p = t.p;
     if (dim >= p->shape.size())
-      throw std::out_of_range("dim is out of bounds.");
+      throw std::out_of_range(std::format("cat: dim {} is out of bounds {}.", dim, p->shape.size()));
     if (p->shape.size() != b.p->shape.size())
-      throw std::invalid_argument("b is not of the same rank.");
+      throw std::invalid_argument(std::format("cat: b (rank {}) is needs to be of rank {}.", b.p->shape.size(), p->shape.size()));
     for (size_t i = 0; i < p->shape.size(); i++)
       if (i != dim and p->shape[i] != b.p->shape[i])
-        throw std::invalid_argument("Dimensions other than dim should be equal.");
+        throw std::invalid_argument("cat: dimensions other than dim should be equal.");
 
     size_t inner = 1;
     for (size_t i = dim + 1; i < p->shape.size(); i++)
@@ -160,14 +161,14 @@ namespace NN::Detail {
 
   Tensor stack(const Tensor &t, const Tensor &b, size_t dim) {
     if (t.empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("stack: empty tensor.");
     auto &p = t.p;
     auto &shape = p->shape;
     const size_t n = shape.size();
     if (dim > n)
-      throw std::out_of_range("dim is out of bounds.");
+      throw std::out_of_range(std::format("stack: dim {} is out of bounds {}.", dim, n));
     if (shape != b.p->shape)
-      throw std::invalid_argument("b is not of the same shape.");
+      throw std::invalid_argument(std::format("stack: b of shape {} needs to be of the shape {}.", b.p->shape, shape));
 
     const size_t axis = dim < n ? shape[dim] : 1;
     size_t inner = 1;
@@ -222,7 +223,7 @@ namespace NN::Detail {
     auto &p = t.p;
     auto &shape = p->shape, &bshape = b.p->shape;
     if (shape.size() < 2 or bshape.size() < 2)
-      throw std::domain_error("Cant matmul with a scalar.");
+      throw std::domain_error("matmul: Cant matmul with a scalar.");
 
     const size_t arank = shape.size(), brank = bshape.size();
     const size_t m = shape[arank - 2];
@@ -232,7 +233,7 @@ namespace NN::Detail {
     // A: [..., m, k]
     // B: [..., k, n]
     if (k != bshape[brank - 2])
-      throw std::invalid_argument("Incompatible tensors for matmul.");
+      throw std::invalid_argument(std::format("matmul: Incompatible tensors of shape {} and {}", t.p->shape, b.p->shape));
 
     auto a_shape = std::span(shape).first(shape.size() - 2);
     auto b_shape = std::span(bshape).first(bshape.size() - 2);

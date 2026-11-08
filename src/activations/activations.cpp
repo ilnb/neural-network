@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <memory>
 #include <stdexcept>
 
@@ -136,28 +137,28 @@ namespace NN::Act {
   namespace Detail {
     Tensor relu(const Tensor &x) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("relu: empty tensor.");
       return Tensor(NN::Detail::map(x, [](dtype v) { return v > 0 or std::isnan(v) ? v : 0; }));
     }
 
     Tensor sigmoid(const Tensor &x) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("sigmoid: empty tensor.");
       return Tensor(NN::Detail::map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
     }
 
     Tensor softmax(const Tensor &x, size_t dim) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("softmax: empty tensor.");
       if (x.p->shape.empty()) {
         if (dim != 0)
-          throw std::out_of_range("dim is out of bounds.");
+          throw std::out_of_range(std::format("softmax: dim {} is of bounds for scalar.", dim));
         const dtype v = x.p->data[0];
         const dtype e = std::exp(v - v); // to preserve NaN and inf poisons
         return Tensor(e / e);
       }
       if (dim >= x.p->shape.size())
-        throw std::out_of_range("dim is out of bounds.");
+        throw std::out_of_range(std::format("softmax: dim {} is out of bounds {}", dim, x.p->shape.size()));
 
       Tensor r;
       r.set_dims(x.p->shape, false);
@@ -193,15 +194,15 @@ namespace NN::Act {
 
     Tensor log_softmax(const Tensor &x, size_t dim) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("log_softmax: empty tensor.");
       if (x.p->shape.empty()) {
         if (dim != 0)
-          throw std::out_of_range("dim is out of bounds.");
+          throw std::out_of_range(std::format("log_softmax: dim {} is of bounds for scalar.", dim));
         const dtype v = x.p->data[0];
         return Tensor(v - v);
       }
       if (dim >= x.p->shape.size())
-        throw std::out_of_range("dim out of bounds.");
+        throw std::out_of_range(std::format("log_softmax: dim {} is out of bounds {}", dim, x.p->shape.size()));
 
       Tensor r;
       r.set_dims(x.p->shape, false);

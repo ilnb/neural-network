@@ -6,6 +6,7 @@
 #include "tensor/tensor.hpp"
 
 #include <cmath>
+#include <format>
 #include <stdexcept>
 #include <vector>
 
@@ -58,11 +59,11 @@ namespace NN {
     // in `[0, 1]`, or `eps` is not finite or not positive.
     BatchNorm(size_t n, const Config &c) : channels(n), gamma({ n }), beta({ n }), running_mean({ n }), running_var({ n }), cfg(c) {
       if (channels == 0)
-        throw std::invalid_argument("n should be > 0.");
+        throw std::invalid_argument("BatchNorm: n should be > 0.");
       if (!std::isfinite(cfg.mom) or cfg.mom < 0 or 1 < cfg.mom)
-        throw std::invalid_argument("momentum should be in [0, 1].");
+        throw std::invalid_argument(std::format("BatchNorm: momentum {} should be in [0, 1].", cfg.mom));
       if (!std::isfinite(cfg.eps) or cfg.eps <= 0)
-        throw std::invalid_argument("eps should be a positive real number.");
+        throw std::invalid_argument(std::format("BatchNorm: eps {} should be a positive real number.", cfg.eps));
 
       std::ranges::fill(gamma.p->data, dtype(1));
       std::ranges::fill(running_var.p->data, dtype(1));

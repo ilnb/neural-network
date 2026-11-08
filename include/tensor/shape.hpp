@@ -2,6 +2,7 @@
 
 #include "tensor/impl.hpp"
 
+#include <format>
 #include <memory>
 #include <ranges>
 #include <vector>
@@ -19,9 +20,9 @@ namespace NN::Detail {
     size_t n = 1;
     for (size_t x : s) {
       if (x == 0)
-        throw std::invalid_argument("Tensor dimensions must be positive.");
+        throw std::invalid_argument("checked_num_el: tensor dimensions must be positive.");
       if (n > std::numeric_limits<size_t>::max() / x)
-        throw std::overflow_error("Tensor size overflow");
+        throw std::overflow_error("checked_num_el: size_t overflow");
       n *= x;
     }
     return n;
@@ -59,7 +60,7 @@ namespace NN::Detail {
   inline std::vector<size_t> aligned_strides(const std::shared_ptr<Impl> &p, const std::vector<size_t> &out) {
     const size_t n = p->shape.size();
     if (out.size() < n)
-      throw std::logic_error("Cant align strides to a lower rank shape.");
+      throw std::logic_error("aligned_strides: Cant align strides to a lower rank shape.");
     std::vector<size_t> s(out.size());
     const size_t off = out.size() - n;
     for (size_t i = 0; i < n; i++)
@@ -98,7 +99,7 @@ namespace NN::Detail {
       const size_t x = i < ao ? 1 : ita[i - ao];
       const size_t y = i < bo ? 1 : itb[i - bo];
       if (x != y and x != 1 and y != 1)
-        throw std::invalid_argument("Shapes not broadcastable.");
+        throw std::invalid_argument(std::format("broadcast_shape: shapes {} and {} are not broadcastable.", a, b));
       out[i] = std::max(x, y);
     }
     return out;

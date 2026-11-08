@@ -71,6 +71,7 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
 int main() {
   Tensor X, Y;
   {
+    const size_t w = 8, h = 8;
     std::ifstream f("assets/digits.csv");
     if (!f) {
       std::println(stderr, "Not able to open digits.csv");
@@ -88,13 +89,13 @@ int main() {
         auto [ptr, err_c] = std::from_chars(tok.data(), tok.data() + tok.size(), v);
         if (err_c != std::errc())
           throw std::runtime_error("bad number on line " + std::to_string(lines + 1));
-        if (col < 64)
+        if (col < w * h)
           feats.push_back(v / 16);
-        else if (col == 64)
+        else if (col == w * h)
           labels.push_back(v);
         col++;
       }
-      if (col != 65)
+      if (col != w * h + 1)
         throw std::runtime_error("expected 65 columns on line " + std::to_string(lines + 1));
       lines++;
     }
@@ -103,7 +104,7 @@ int main() {
     for (size_t i = 0; i < lines; i++)
       onehot[i * 10 + static_cast<size_t>(labels[i])] = 1;
 
-    X.set_dims(lines, 1, 8, 8).set_data(std::move(feats));
+    X.set_dims(lines, 1, w, h).set_data(std::move(feats));
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 

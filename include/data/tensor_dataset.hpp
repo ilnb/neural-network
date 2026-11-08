@@ -19,11 +19,11 @@ namespace NN::Data {
     // their leading dimensions differ.
     TensorDataset(const Tensor &d, const Tensor &t) : data(d), target(t) {
       if (d.empty() || t.empty())
-        throw std::invalid_argument("Empty dataset tensor.");
+        throw std::invalid_argument("TensorDataset: empty dataset tensor.");
       if (d.p->shape.empty() || t.p->shape.empty())
-        throw std::invalid_argument("Dataset tensors need a sample axis (rank >= 1).");
+        throw std::invalid_argument("TensorDataset: dataset tensors need a sample axis (rank >= 1).");
       if (d.p->shape[0] != t.p->shape[0])
-        throw std::invalid_argument("data and target must have the same first dimension.");
+        throw std::invalid_argument("TensorDataset: data and target must have the same first dimension.");
     }
 
     size_t size() const override { return data.p->shape[0]; }

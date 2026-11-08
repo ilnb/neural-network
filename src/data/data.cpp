@@ -5,6 +5,7 @@
 #include "tensor/tensor.hpp"
 
 #include <algorithm>
+#include <format>
 #include <ranges>
 #include <stdexcept>
 #include <vector>
@@ -13,22 +14,22 @@ namespace NN::Data {
   // Kept out of line: inlining the virtual `size()` call into the DataLoader
   // constructors makes GCC 16 emit a false `-Warray-bounds`.
   void DataLoader::check() const {
-    if (cfg.batch_size == 0)
-      throw std::invalid_argument("Batch size should be positive.");
+    if (cfg.batch_size <= 0)
+      throw std::invalid_argument(std::format("check: batch_size {} should be positive.", cfg.batch_size));
     if (cfg.drop_last && cfg.batch_size > ds->size())
-      throw std::invalid_argument("drop_last with batch_size > dataset size yields no batches.");
+      throw std::invalid_argument(std::format("check: drop_last with batch_size {} > dataset size {} yields no batches.", cfg.batch_size, ds->size()));
   }
 
   namespace Detail {
     Tensor stack(const std::vector<Tensor> &ts) {
       if (ts.empty())
-        throw std::invalid_argument("Cannot stack zero tensors.");
+        throw std::invalid_argument("stack: cannot stack zero tensors.");
 
       const auto &shape0 = ts.front().p->shape;
       const size_t len = ts.front().p->num_el;
       for (const auto &t : ts)
         if (t.p->shape != shape0)
-          throw std::invalid_argument("Stacked tensors must share a shape.");
+          throw std::invalid_argument("stack: stacked tensors must share a shape.");
 
       std::vector<size_t> shape(shape0);
       shape.insert(shape.begin(), ts.size());
@@ -41,7 +42,7 @@ namespace NN::Data {
 
   std::pair<Tensor, Tensor> Dataset::batch(std::span<const size_t> idx) const {
     if (idx.empty())
-      throw std::invalid_argument("Cannot batch zero samples.");
+      throw std::invalid_argument("batch: cannot batch zero samples.");
 
     std::vector<Tensor> d, t;
     d.reserve(idx.size());
@@ -56,7 +57,7 @@ namespace NN::Data {
 
   std::pair<Tensor, Tensor> TensorDataset::operator[](size_t i) const {
     if (i >= size())
-      throw std::out_of_range("Index out of range.");
+      throw std::out_of_range(std::format("operator[]: idx {} out of range {}.", i, size()));
 
     auto shape_d = data.p->shape | std::views::drop(1);
     auto shape_t = target.p->shape | std::views::drop(1);
@@ -73,7 +74,7 @@ namespace NN::Data {
 
   std::pair<Tensor, Tensor> TensorDataset::batch(std::span<const size_t> idx) const {
     if (idx.empty())
-      throw std::invalid_argument("Cannot batch zero samples.");
+      throw std::invalid_argument("batch: cannot batch zero samples.");
 
     auto dshape = data.p->shape;
     dshape[0] = idx.size();
