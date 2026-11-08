@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <format>
 #include <memory>
+#include <omp.h>
 #include <stdexcept>
 #include <vector>
 
@@ -48,6 +49,10 @@ namespace NN {
         hi[kw] = static_cast<ptrdiff_t>(W_out) - 1;
     }
 
+    // Each `(n, oc)` pair owns a disjoint output plane, and everything else in
+    // the loop is read-only, so both axes can be split across threads. The
+    // work per pair is uniform, which makes a static split appropriate.
+#pragma omp parallel for collapse(2) schedule(static)
     for (size_t n = 0; n < N; n++) {
       for (size_t oc = 0; oc < out_channels; oc++) {
         const dtype bv = bias ? bias[oc] : dtype(0);
@@ -109,7 +114,25 @@ namespace NN {
             hi[kw] = static_cast<ptrdiff_t>(W_out) - 1;
         }
 
+        // Split over `n`: every sample owns its own slice of `dx`, so the
+        // adjoint needs no synchronization. `dw` and `db` are shared by all
+        // samples, so each worker accumulates into a private buffer and the
+        // partials are reduced in worker order below. That keeps the result
+        // identical for a fixed thread count.
+        //
+        // When `N` is smaller than the thread count some workers sit idle, but
+        // the mapping stays correct for any batch size.
+        const int workers = static_cast<int>(std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(omp_get_max_threads()), N)));
+        const size_t wsize = wd.size(), bsize = bd.size();
+        std::vector<dtype> dw_local(static_cast<size_t>(workers) * wsize, dtype(0));
+        std::vector<dtype> db_local(bp ? static_cast<size_t>(workers) * bsize : 0, dtype(0));
+
+#pragma omp parallel for schedule(static) num_threads(workers)
         for (size_t n = 0; n < N; n++) {
+          const auto worker = static_cast<size_t>(omp_get_thread_num());
+          dtype *wd_t = dw_local.data() + worker * wsize;
+          dtype *bd_t = bp ? db_local.data() + worker * bsize : nullptr;
+
           for (size_t oc = 0; oc < out; oc++) {
             dtype db_acc = 0;
             for (size_t oh = 0; oh < H_out; oh++) {
@@ -138,13 +161,27 @@ namespace NN {
                       xd_row[xi] += wv * grad_row[ow];
                       dw_acc += in_row[xi] * grad_row[ow];
                     }
-                    wd[wi] += dw_acc;
+                    wd_t[wi] += dw_acc;
                   }
                 }
               }
             }
             if (bp)
-              bd[oc] += db_acc;
+              bd_t[oc] += db_acc;
+          }
+        }
+
+        // Reduction of the per-worker parameter gradients.
+        for (int t = 0; t < workers; t++) {
+          const auto worker = static_cast<size_t>(t);
+          const dtype *wd_t = dw_local.data() + worker * wsize;
+          for (size_t i = 0; i < wsize; i++)
+            wd[i] += wd_t[i];
+
+          if (bp) {
+            const dtype *bd_t = db_local.data() + worker * bsize;
+            for (size_t i = 0; i < bsize; i++)
+              bd[i] += bd_t[i];
           }
         }
 

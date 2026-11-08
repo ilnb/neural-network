@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(neural-net LANGUAGES CXX)
 
+find_package(OpenMP REQUIRED)
+
 set(NN_DTYPE "float" CACHE STRING "Type of NN::dtype")
 set_property(CACHE NN_DTYPE PROPERTY STRINGS float double)
 if(NOT NN_DTYPE MATCHES "^(float|double)$")
@@ -36,6 +38,9 @@ target_include_directories(neural
 )
 
 target_compile_definitions(neural PUBLIC NN_DTYPE=${NN_DTYPE})
+
+# PUBLIC so demos and tests link the same OpenMP runtime as the library.
+target_link_libraries(neural PUBLIC OpenMP::OpenMP_CXX)
 
 add_executable(tensor_test tests/tensor.cpp)
 add_executable(act_test tests/act.cpp)
