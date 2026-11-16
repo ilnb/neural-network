@@ -52,7 +52,10 @@ namespace NN {
       if (cfg.bias)
         fn->inputs.emplace_back(b.p);
 
-      fn->backward = [xp = x.p, wp = w.p, bp = cfg.bias ? b.p : nullptr, col, pool = col_pool, g](const Tensor &dz) {
+      // `mutable`: the captures are const in a plain lambda, which would make
+      // `std::move(col)` below bind to the copy constructor instead of the move.
+      // Backward runs once, so consuming the capture is safe.
+      fn->backward = [xp = x.p, wp = w.p, bp = cfg.bias ? b.p : nullptr, col, pool = col_pool, g](const Tensor &dz) mutable {
         const size_t N = g.N, out = g.out_channels, K = g.K(), HW = g.HW();
         const dtype *dy = dz.p->data.data(); // flat [N, out, HW]
         const auto acquire = [&pool] {
