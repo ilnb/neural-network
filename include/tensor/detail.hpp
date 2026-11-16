@@ -44,6 +44,20 @@ namespace NN::Detail {
 
   Tensor matmul(const Tensor &t, const Tensor &b);
 
+  // Writes the product of a shared `a` with a batch of `b` into `dst`, without
+  // allocating it. This is the fast path behind `matmul()`, exposed for callers
+  // that already own the destination buffer and want to skip the allocation and
+  // zero-fill of a full-size result.
+  //
+  //   a:   [m, k], contiguous, reused for every batch element.
+  //   b:   [cnt, k, n], contiguous.
+  //   dst: [cnt, m, n], contiguous, fully overwritten.
+  //   bias: optional, `m` values added to every output row.
+  //
+  // Every element is accumulated over `t` in ascending order, so the result is
+  // bit-identical to the reference product.
+  void matmul_into(const dtype *a, const dtype *b, dtype *dst, size_t cnt, size_t m, size_t k, size_t n, const dtype *bias = nullptr);
+
   // Returns a new tensor of `op(a, b)` with full broadcasting.
   template <typename Op>
     requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>

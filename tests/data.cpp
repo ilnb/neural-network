@@ -199,7 +199,7 @@ static void test_errors() {
   check_throws<std::invalid_argument>([&] { (void)static_cast<const Data::Dataset &>(ds).batch({}); }, "Dataset::batch: empty index list throws");
 
   const Tensor empty;
-  Tensor scalar = mk({ 1 }, { 1 }).sum();
+  Tensor scalar(1);
   check_throws<std::invalid_argument>([&] { (void)Data::TensorDataset(empty, empty); }, "TensorDataset: empty tensors throw");
   check_throws<std::invalid_argument>([&] { (void)Data::TensorDataset(scalar, scalar); }, "TensorDataset: rank-0 throws");
   check_throws<std::invalid_argument>([] { (void)Data::TensorDataset(mk({ 3, 2 }, { 0, 0, 0, 0, 0, 0 }), mk({ 2, 1 }, { 0, 0 })); },

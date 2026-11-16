@@ -13,11 +13,10 @@
 using NN::Autograd::GradFn, NN::Autograd::accumulate;
 
 namespace NN::Loss {
-
   Tensor mse(const Tensor &pred, const Tensor &target) {
     auto r = Detail::mse(pred, target);
 
-    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
@@ -31,14 +30,14 @@ namespace NN::Loss {
           auto &xd = dx.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
             xd[i] = f * (pdata[i] - tdata[i]);
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
           auto &tdd = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
             tdd[i] = -f * (pdata[i] - tdata[i]);
-          Autograd::accumulate(*at, dt);
+          accumulate(*at, dt);
         }
       };
 
@@ -51,7 +50,7 @@ namespace NN::Loss {
   Tensor bce(const Tensor &pred, const Tensor &target) {
     auto r = Detail::bce(pred, target);
 
-    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
@@ -68,7 +67,7 @@ namespace NN::Loss {
             if (p != t)
               xd[i] = f * (p - t) / (p * (1 - p));
           }
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
@@ -78,7 +77,7 @@ namespace NN::Loss {
             if (p != 0 and p != 1)
               td[i] = f * (std::log(1 - p) - std::log(p));
           }
-          Autograd::accumulate(*at, dt);
+          accumulate(*at, dt);
         }
       };
 
@@ -91,7 +90,7 @@ namespace NN::Loss {
   Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
     auto r = Detail::ce(pred, target, dim);
 
-    bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
@@ -106,14 +105,14 @@ namespace NN::Loss {
           for (size_t i = 0, n = ap->num_el; i < n; i++)
             if (td[i] != 0)
               xd[i] = f * td[i] / pdata[i];
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
           auto &td = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
             td[i] = f * std::log(pdata[i]);
-          Autograd::accumulate(*at, dt);
+          accumulate(*at, dt);
         }
       };
 

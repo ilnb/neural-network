@@ -31,16 +31,17 @@ inline void check_close(dtype got, dtype want, dtype tol, const char *what) {
   }
 }
 
-template <typename Ex, typename F>
-inline void check_throws(F f, const char *what) {
+template <typename... Ex>
+inline void check_throws(auto f, const char *what) {
   try {
     f();
     std::println(stderr, "FAIL: {} (no exception)", what);
     failures++;
-  } catch (const Ex &) {
   } catch (const std::exception &e) {
-    std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
-    failures++;
+    if (!(dynamic_cast<const Ex *>(&e) or ...)) {
+      std::println(stderr, "FAIL: {} (wrong exception: {})", what, e.what());
+      failures++;
+    }
   }
 }
 

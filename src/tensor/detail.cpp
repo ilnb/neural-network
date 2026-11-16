@@ -218,6 +218,99 @@ namespace NN::Detail {
     return r;
   }
 
+  void matmul_into(const dtype *a, const dtype *b, dtype *dst, size_t cnt, size_t m, size_t k, size_t n, const dtype *bias) {
+    if (cnt == 0 or m == 0 or n == 0)
+      return;
+
+    // 8 output rows by 4 columns held in registers for the whole reduction: the
+    // 4-wide slice of `b` is loaded once per tap and reused by all 8 rows, which
+    // is what turns this from a memory-bound loop into a compute-bound one.
+    // Reducing over `t` in one ascending pass keeps every element bit-identical
+    // to the reference product.
+    constexpr size_t IR = 8, JR = 4;
+    const size_t it = m / IR, jt = n / JR;
+    const size_t i_full = it * IR, j_full = jt * JR;
+    const size_t work = cnt * m * n * k;
+
+    if (i_full > 0 and j_full > 0) {
+#pragma omp parallel for collapse(3) schedule(static) if (work > 1'000'000)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t ib = 0; ib < it; ib++) {
+          for (size_t jb = 0; jb < jt; jb++) {
+            const size_t i0 = ib * IR, j0 = jb * JR;
+            const dtype *brow = b + (idx * k) * n + j0;
+
+            dtype acc[IR][JR];
+            for (size_t r = 0; r < IR; r++)
+#pragma omp simd
+              for (size_t j = 0; j < JR; j++)
+                acc[r][j] = 0;
+
+            for (size_t t = 0; t < k; t++) {
+              const dtype *bt = brow + t * n;
+              dtype bv[JR];
+#pragma omp simd
+              for (size_t j = 0; j < JR; j++)
+                bv[j] = bt[j];
+
+              for (size_t r = 0; r < IR; r++) {
+                const dtype av = a[(i0 + r) * k + t];
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  acc[r][j] += av * bv[j];
+              }
+            }
+
+            // Bias epilogue: folded into the store, so it costs no extra pass.
+            for (size_t r = 0; r < IR; r++) {
+              dtype *crow = dst + (idx * m + i0 + r) * n + j0;
+              if (bias) {
+                const dtype bv = bias[i0 + r];
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  crow[j] = acc[r][j] + bv;
+              } else {
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  crow[j] = acc[r][j];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Edges that the register tiles do not cover. These are at most IR-1 rows
+    // and JR-1 columns, so the plain scalar loop is fine.
+    if (j_full < n) {
+#pragma omp parallel for collapse(2) schedule(static)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t i = 0; i < i_full; i++) {
+          for (size_t j = j_full; j < n; j++) {
+            dtype sum = 0;
+            for (size_t t = 0; t < k; t++)
+              sum += a[i * k + t] * b[(idx * k + t) * n + j];
+            dst[(idx * m + i) * n + j] = bias ? sum + bias[i] : sum;
+          }
+        }
+      }
+    }
+
+    if (i_full < m) {
+#pragma omp parallel for collapse(2) schedule(static)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t i = i_full; i < m; i++) {
+          for (size_t j = 0; j < n; j++) {
+            dtype sum = 0;
+            for (size_t t = 0; t < k; t++)
+              sum += a[i * k + t] * b[(idx * k + t) * n + j];
+            dst[(idx * m + i) * n + j] = bias ? sum + bias[i] : sum;
+          }
+        }
+      }
+    }
+  }
+
   Tensor matmul(const Tensor &t, const Tensor &b) {
     Tensor::validate(t, b);
     auto &p = t.p;
@@ -274,10 +367,24 @@ namespace NN::Detail {
 
     std::vector<dtype> out(cnt * m * n);
 
-    size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
-    size_t b1 = bstrides[brank - 1], b2 = bstrides[brank - 2];
+    const size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
+    const size_t b1 = bstrides[brank - 1], b2 = bstrides[brank - 2];
 
     auto &data = p->data, &bdata = b.p->data;
+
+    // Fast path: both operands are contiguous along their trailing axis and `a`
+    // is shared across the batch, which is what every layer in this library
+    // produces. Anything else (multi-axis batch broadcast, strided views) falls
+    // back to the general loop below.
+    const bool a_shared = std::ranges::all_of(a_bs, [](size_t s) { return s == 0; });
+    const bool b_flat = br == 0 or (br == 1 and b_bs[0] == k * n);
+    if (a1 == 1 and a2 == k and b1 == 1 and b2 == n and a_shared and b_flat) {
+      matmul_into(data.data(), bdata.data(), out.data(), cnt, m, k, n);
+      Tensor ret(std::move(batch));
+      ret.p->data = std::move(out);
+      return ret;
+    }
+
     for (size_t idx = 0; idx < cnt; idx++) {
       size_t a_off = 0, b_off = 0, tmp = idx;
       for (size_t d = br; d-- > 0;) {

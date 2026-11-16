@@ -21,6 +21,7 @@ add_library(neural SHARED
   src/data/split.cpp
   src/module/batchnorm.cpp
   src/module/conv.cpp
+  src/module/conv_detail.cpp
   src/module/maxpool2d.cpp
 )
 

@@ -74,7 +74,7 @@ namespace NN {
   Tensor Tensor::cat(const Tensor &b, size_t dim) const {
     auto r = Detail::cat(*this, b, dim);
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
@@ -116,7 +116,7 @@ namespace NN {
   Tensor Tensor::stack(const Tensor &b, size_t dim) const {
     auto r = Detail::stack(*this, b, dim);
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
@@ -244,7 +244,7 @@ namespace NN {
         auto &xd = dx.p->data, &zd = dz.p->data, &rd = rp->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++)
           xd[i] = zd[i] / (2 * rd[i]);
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -471,7 +471,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::plus<>());
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
@@ -507,7 +507,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::minus<>());
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
@@ -538,7 +538,7 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::multiplies<>());
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
@@ -586,7 +586,7 @@ namespace NN {
   Tensor Tensor::matmul(const Tensor &b) const {
     auto r = Detail::matmul(*this, b);
 
-    bool requires_grad = p->requires_grad or b.p->requires_grad;
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
     if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };

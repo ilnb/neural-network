@@ -3,7 +3,9 @@
 #include "module/base.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <random>
+#include <vector>
 
 namespace NN {
   struct Conv2d : Module {
@@ -20,6 +22,10 @@ namespace NN {
     size_t kernel_h, kernel_w;
     Config cfg;
     std::mt19937 rng;
+
+    // Recycled im2col buffers. Forward takes from here and backward puts
+    // it back. Shared so a backward that outlives the module cant dangle.
+    std::shared_ptr<std::vector<std::shared_ptr<Tensor>>> col_pool = std::make_shared<std::vector<std::shared_ptr<Tensor>>>();
 
     // N x C_out x H x W initialization
     Conv2d(size_t in, size_t out, size_t kernel_h, size_t kernel_w, const Config &c)
