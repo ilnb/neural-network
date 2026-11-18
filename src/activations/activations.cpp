@@ -5,10 +5,14 @@
 #include "nn/detail.hpp"
 #include "tensor/detail.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <memory>
 #include <stdexcept>
+
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
 
 namespace NN::Act {
   dtype sigmoid(dtype v) {
@@ -22,7 +26,7 @@ namespace NN::Act {
     auto r = Detail::relu(x);
 
     if (Autograd::grad_enabled and x.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { x.p };
       fn->backward = [ap = x.p](const Tensor &dz) {
         if (ap->requires_grad) {
@@ -32,7 +36,7 @@ namespace NN::Act {
           for (size_t i = 0, n = ap->num_el; i < n; i++)
             if (adata[i] > 0)
               xdata[i] = zdata[i];
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         }
       };
       r.p->grad_fn = std::move(fn);
@@ -45,7 +49,7 @@ namespace NN::Act {
     auto r = Detail::sigmoid(x);
 
     if (Autograd::grad_enabled and x.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { x.p };
       std::weak_ptr<Impl> wr = r.p;
       fn->backward = [ap = x.p, wr](const Tensor &dz) {
@@ -59,7 +63,7 @@ namespace NN::Act {
           const dtype y = ydata[i];
           xdata[i] = zdata[i] * y * (1 - y);
         }
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -71,7 +75,7 @@ namespace NN::Act {
     auto r = Detail::softmax(x, dim);
 
     if (Autograd::grad_enabled and x.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { x.p };
       std::weak_ptr<Impl> wr = r.p;
       fn->backward = [ap = x.p, wr, dim](const Tensor &dz) {
@@ -79,7 +83,7 @@ namespace NN::Act {
         if (!ap->requires_grad or !ar)
           return;
         if (ap->shape.empty()) {
-          Autograd::accumulate(*ap, Tensor(0));
+          accumulate(*ap, Tensor(0));
           return;
         }
         Tensor y(ar);
@@ -90,7 +94,7 @@ namespace NN::Act {
         const auto &ydata = ar->data, &sdata = ex.p->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++)
           xdata[i] = ydata[i] * (zdata[i] - sdata[i]);
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -102,7 +106,7 @@ namespace NN::Act {
     auto r = Detail::log_softmax(x, dim);
 
     if (Autograd::grad_enabled and x.p->requires_grad) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { x.p };
 
       std::weak_ptr<Impl> wr = r.p;
@@ -111,7 +115,7 @@ namespace NN::Act {
         if (!ap->requires_grad or !ar)
           return;
         if (ap->shape.empty()) {
-          Autograd::accumulate(*ap, Tensor(0));
+          accumulate(*ap, Tensor(0));
           return;
         }
         Tensor y(ar);
@@ -121,7 +125,7 @@ namespace NN::Act {
         auto &ydata = ar->data, &sdata = s.p->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++)
           xdata[i] = zdata[i] - std::exp(ydata[i]) * sdata[i];
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -133,28 +137,28 @@ namespace NN::Act {
   namespace Detail {
     Tensor relu(const Tensor &x) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("relu: empty tensor.");
       return Tensor(NN::Detail::map(x, [](dtype v) { return v > 0 or std::isnan(v) ? v : 0; }));
     }
 
     Tensor sigmoid(const Tensor &x) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("sigmoid: empty tensor.");
       return Tensor(NN::Detail::map(x, [](dtype v) { return NN::Act::sigmoid(v); }));
     }
 
     Tensor softmax(const Tensor &x, size_t dim) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("softmax: empty tensor.");
       if (x.p->shape.empty()) {
         if (dim != 0)
-          throw std::out_of_range("dim is out of bounds.");
+          throw std::out_of_range(std::format("softmax: dim {} is of bounds for scalar.", dim));
         const dtype v = x.p->data[0];
         const dtype e = std::exp(v - v); // to preserve NaN and inf poisons
         return Tensor(e / e);
       }
       if (dim >= x.p->shape.size())
-        throw std::out_of_range("dim is out of bounds.");
+        throw std::out_of_range(std::format("softmax: dim {} is out of bounds {}", dim, x.p->shape.size()));
 
       Tensor r;
       r.set_dims(x.p->shape, false);
@@ -190,15 +194,15 @@ namespace NN::Act {
 
     Tensor log_softmax(const Tensor &x, size_t dim) {
       if (x.empty())
-        throw std::invalid_argument("Empty tensor.");
+        throw std::invalid_argument("log_softmax: empty tensor.");
       if (x.p->shape.empty()) {
         if (dim != 0)
-          throw std::out_of_range("dim is out of bounds.");
+          throw std::out_of_range(std::format("log_softmax: dim {} is of bounds for scalar.", dim));
         const dtype v = x.p->data[0];
         return Tensor(v - v);
       }
       if (dim >= x.p->shape.size())
-        throw std::out_of_range("dim out of bounds.");
+        throw std::out_of_range(std::format("log_softmax: dim {} is out of bounds {}", dim, x.p->shape.size()));
 
       Tensor r;
       r.set_dims(x.p->shape, false);

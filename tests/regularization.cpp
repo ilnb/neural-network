@@ -2,6 +2,7 @@
 #include "autograd/grad_mode.hpp"
 #include "loss/loss.hpp"
 #include "utils.hpp"
+
 #include <stdexcept>
 
 namespace Reg = NN::Reg;

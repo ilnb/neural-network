@@ -3,14 +3,16 @@
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"
 #include "tensor/detail.hpp"
+
 #include <algorithm>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
+
 namespace NN {
-  using Autograd::GradFn, Autograd::accumulate;
   void Tensor::assign_shape(std::vector<size_t> &&dims, const bool clear) {
     if (!p)
       p = std::make_shared<Impl>();
@@ -72,7 +74,8 @@ namespace NN {
   Tensor Tensor::cat(const Tensor &b, size_t dim) const {
     auto r = Detail::cat(*this, b, dim);
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
 
@@ -113,7 +116,8 @@ namespace NN {
   Tensor Tensor::stack(const Tensor &b, size_t dim) const {
     auto r = Detail::stack(*this, b, dim);
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
 
@@ -190,33 +194,33 @@ namespace NN {
 
   void Tensor::set_requires_grad(const bool x) {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("set_requires_grad: empty tensor.");
     if (p->grad_fn)
-      throw std::logic_error("requires_grad can only be changed on a leaf tensor.");
+      throw std::logic_error("set_requires_grad: only leaf tensor can be modified.");
     p->requires_grad = x;
   }
 
   void Tensor::check_mutable() const {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("check_mutable: empty tensor.");
     if (Autograd::grad_enabled and (p->requires_grad or p->grad_fn))
-      throw std::logic_error("In-place op involving autograd tensor.");
+      throw std::logic_error("check_mutable: not a leaf tensor.");
   }
 
   void Tensor::validate() const {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("validate: empty tensor.");
 
     if (not Detail::valid_strides(p))
-      throw std::invalid_argument("Malformed strides.");
+      throw std::invalid_argument("validate: malformed strides.");
 
     if (p->data.size() != p->num_el or Detail::checked_num_el(p->shape) != p->num_el)
-      throw std::invalid_argument("Malformed num_el or data.");
+      throw std::invalid_argument("validate: malformed num_el or data.");
   }
 
   Tensor Tensor::clone() const {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("clone: empty tensor.");
     auto r = Tensor(p->shape);
     r.set_data(p->data);
     return r;
@@ -224,7 +228,7 @@ namespace NN {
 
   dtype Tensor::item() const {
     if (empty() or p->num_el != 1)
-      throw std::domain_error("Tensor must contain exactly one element.");
+      throw std::domain_error("item: tensor must contain exactly one element.");
     return p->data[0];
   }
 
@@ -240,7 +244,7 @@ namespace NN {
         auto &xd = dx.p->data, &zd = dz.p->data, &rd = rp->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++)
           xd[i] = zd[i] / (2 * rd[i]);
-        Autograd::accumulate(*ap, dx);
+        accumulate(*ap, dx);
       };
       r.p->grad_fn = std::move(fn);
       r.p->requires_grad = true;
@@ -268,13 +272,13 @@ namespace NN {
 
   Tensor Tensor::mean() const {
     if (empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("mean: empty tensor.");
     return sum() / p->num_el;
   }
 
   Tensor Tensor::min() const {
     if (empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("min: empty tensor.");
 
     const auto idx = std::ranges::min_element(p->data) - p->data.begin();
     Tensor r(p->data[idx]);
@@ -296,7 +300,7 @@ namespace NN {
 
   Tensor Tensor::max() const {
     if (empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("max: empty tensor.");
 
     const auto idx = std::ranges::max_element(p->data) - p->data.begin();
     Tensor r(p->data[idx]);
@@ -350,9 +354,9 @@ namespace NN {
 
   Tensor Tensor::mean(size_t dim) const {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("mean: empty tensor.");
     if (dim >= p->shape.size())
-      throw std::out_of_range("Out of bounds axis.");
+      throw std::out_of_range(std::format("mean: dim {} is out of bounds {}", dim, p->shape.size()));
     const dtype f = p->shape[dim];
     auto r = Detail::reduce(*this, dim, dtype{ 0 }, std::plus<>());
     for (auto &x : r.p->data)
@@ -467,7 +471,8 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::plus<>());
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -489,11 +494,10 @@ namespace NN {
 
   Tensor &Tensor::add_(const Tensor &b) {
     check_mutable();
+    b.check_mutable();
     validate(*this, b);
-    if (b.p->requires_grad or b.p->grad_fn)
-      throw std::logic_error("In-place op involving autograd tensor.");
     if (not Detail::broadcasts_into(p->shape, b.p->shape))
-      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+      throw std::invalid_argument("add_: operand doesnt broadcast into this tensor in-place.");
     return Detail::binary_inplace(*this, b, std::plus<>());
   }
 
@@ -503,7 +507,8 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::minus<>());
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -525,7 +530,7 @@ namespace NN {
     b.check_mutable();
     validate(*this, b);
     if (not Detail::broadcasts_into(p->shape, b.p->shape))
-      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+      throw std::invalid_argument("sub_: operand doesnt broadcast into this tensor in-place.");
     return Detail::binary_inplace(*this, b, std::minus<>());
   }
 
@@ -533,7 +538,8 @@ namespace NN {
     validate(*this, b);
     auto r = Detail::binary_broadcast(*this, b, std::multiplies<>());
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
       fn->backward = [ap = p, bp = b.p](const Tensor &dz) {
@@ -550,7 +556,7 @@ namespace NN {
 
   Tensor Tensor::mul(const dtype x) const {
     if (empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("mul: empty tensor.");
     auto r = Detail::mul(*this, x);
 
     if (Autograd::grad_enabled and p->requires_grad) {
@@ -570,18 +576,18 @@ namespace NN {
 
   Tensor &Tensor::mul_(const Tensor &b) {
     check_mutable();
+    b.check_mutable();
     validate(*this, b);
-    if (b.p->requires_grad or b.p->grad_fn)
-      throw std::logic_error("In-place op involving autograd tensor.");
     if (not Detail::broadcasts_into(p->shape, b.p->shape))
-      throw std::invalid_argument("Operand doesnt broadcast into this tensor in-place.");
+      throw std::invalid_argument("mul_: operand doesnt broadcast into this tensor in-place.");
     return Detail::binary_inplace(*this, b, std::multiplies<>());
   }
 
   Tensor Tensor::matmul(const Tensor &b) const {
     auto r = Detail::matmul(*this, b);
 
-    if (Autograd::grad_enabled and (p->requires_grad or b.p->requires_grad)) {
+    const bool requires_grad = p->requires_grad or b.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { p, b.p };
 
@@ -630,7 +636,7 @@ namespace NN {
 
   Tensor operator-(const dtype x, const Tensor &a) {
     if (a.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("operator-: empty tensor.");
     Tensor r(a.p->shape);
     auto &rdata = r.p->data, &data = a.p->data;
     for (size_t i = 0, n = a.p->num_el; i < n; i++)
@@ -666,13 +672,13 @@ namespace NN {
 
   Tensor Tensor::operator/(const dtype x) const {
     if (x == 0)
-      throw std::domain_error("Division by zero.");
+      throw std::domain_error("operator/: division by zero.");
     return mul(1 / x);
   }
 
   Tensor &Tensor::operator/=(const dtype x) {
     if (x == 0)
-      throw std::domain_error("Division by zero.");
+      throw std::domain_error("operator/=: division by zero.");
     return mul_(1 / x);
   }
 

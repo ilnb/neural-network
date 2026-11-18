@@ -2,6 +2,7 @@
 
 #include "module/base.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <random>

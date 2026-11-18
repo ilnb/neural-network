@@ -1,6 +1,8 @@
 #pragma once
 
+#include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
+
 #include <vector>
 
 namespace NN::Optim {

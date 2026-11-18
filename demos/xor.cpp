@@ -1,11 +1,10 @@
 #include "data/dataloader.hpp"
-#include "data/tensor_dataset.hpp"
 #include "loss/loss.hpp"
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
 #include "optim/adam.hpp"
-#include "tensor/tensor.hpp"
+
 #include <print>
 
 using namespace NN;

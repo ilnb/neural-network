@@ -3,17 +3,22 @@
 #include "autograd/grad_fn.hpp"
 #include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
+
 #include <cmath>
+#include <format>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
 
 namespace NN::Loss {
   Tensor mse(const Tensor &pred, const Tensor &target) {
     auto r = Detail::mse(pred, target);
 
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
@@ -22,15 +27,17 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
-            dx.p->data[i] = f * (pdata[i] - tdata[i]);
-          Autograd::accumulate(*ap, dx);
+            xd[i] = f * (pdata[i] - tdata[i]);
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &tdd = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
-            dt.p->data[i] = -f * (pdata[i] - tdata[i]);
-          Autograd::accumulate(*at, dt);
+            tdd[i] = -f * (pdata[i] - tdata[i]);
+          accumulate(*at, dt);
         }
       };
 
@@ -42,8 +49,10 @@ namespace NN::Loss {
 
   Tensor bce(const Tensor &pred, const Tensor &target) {
     auto r = Detail::bce(pred, target);
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
 
       fn->backward = [ap = pred.p, at = target.p](const Tensor &dz) {
@@ -52,21 +61,23 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++) {
             const dtype p = pdata[i], t = tdata[i];
             if (p != t)
-              dx.p->data[i] = f * (p - t) / (p * (1 - p));
+              xd[i] = f * (p - t) / (p * (1 - p));
           }
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &td = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++) {
             const dtype p = pdata[i];
             if (p != 0 and p != 1)
-              dt.p->data[i] = f * (std::log(1 - p) - std::log(p));
+              td[i] = f * (std::log(1 - p) - std::log(p));
           }
-          Autograd::accumulate(*at, dt);
+          accumulate(*at, dt);
         }
       };
 
@@ -79,8 +90,9 @@ namespace NN::Loss {
   Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
     auto r = Detail::ce(pred, target, dim);
 
-    if (Autograd::grad_enabled and (pred.p->requires_grad or target.p->requires_grad)) {
-      auto fn = std::make_shared<NN::Autograd::GradFn>();
+    const bool requires_grad = pred.p->requires_grad or target.p->requires_grad;
+    if (Autograd::grad_enabled and requires_grad) {
+      auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {
         const dtype f = -dz.p->data[0] * static_cast<dtype>(ap->shape[dim]) / ap->num_el;
@@ -88,15 +100,19 @@ namespace NN::Loss {
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
+          auto &xd = dx.p->data;
+          auto &td = at->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
-            dx.p->data[i] = f * at->data[i] / pdata[i];
-          Autograd::accumulate(*ap, dx);
+            if (td[i] != 0)
+              xd[i] = f * td[i] / pdata[i];
+          accumulate(*ap, dx);
         }
         if (at->requires_grad) {
           Tensor dt(at->shape);
+          auto &td = dt.p->data;
           for (size_t i = 0, n = at->num_el; i < n; i++)
-            dt.p->data[i] = f * std::log(pdata[i]);
-          Autograd::accumulate(*at, dt);
+            td[i] = f * std::log(pdata[i]);
+          accumulate(*at, dt);
         }
       };
 
@@ -110,7 +126,7 @@ namespace NN::Loss {
     Tensor mse(const Tensor &pred, const Tensor &target) {
       Tensor::validate(pred, target);
       if (pred.p->shape != target.p->shape)
-        throw std::invalid_argument("Incompatible shape.");
+        throw std::invalid_argument(std::format("mse: shapes {} and {} are incompatible.", pred.p->shape, target.p->shape));
 
       double sum = 0;
       auto n = pred.p->num_el;
@@ -125,7 +141,7 @@ namespace NN::Loss {
     Tensor bce(const Tensor &pred, const Tensor &target) {
       Tensor::validate(pred, target);
       if (pred.p->shape != target.p->shape)
-        throw std::invalid_argument("Incompatible shape.");
+        throw std::invalid_argument(std::format("bce: shapes {} and {} are incompatible.", pred.p->shape, target.p->shape));
 
       auto n = pred.p->num_el;
       auto &pdata = pred.p->data, &tdata = target.p->data;
@@ -133,9 +149,9 @@ namespace NN::Loss {
       for (size_t i = 0; i < n; i++) {
         const dtype y = tdata[i], p = pdata[i];
         if (p < 0 or p > 1)
-          throw std::invalid_argument("Malformed tensor data. Probabilities must lie in [0, 1].");
+          throw std::invalid_argument("bce: malformed tensor data. probabilities must lie in [0, 1].");
         if (y != 0 and y != 1)
-          throw std::invalid_argument("Malformed tensor data. Entries should be binary.");
+          throw std::invalid_argument("bce: malformed tensor data. entries must be binary.");
       }
 
       double sum = 0;
@@ -161,19 +177,19 @@ namespace NN::Loss {
     Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
       Tensor::validate(pred, target);
       if (pred.p->shape != target.p->shape)
-        throw std::invalid_argument("Incompatible shape.");
+        throw std::invalid_argument(std::format("ce: shapes {} and {} are incompatible.", pred.p->shape, target.p->shape));
       if (dim >= pred.p->shape.size())
-        throw std::out_of_range("Class axis out of range.");
+        throw std::out_of_range(std::format("ce: dim is {} out of bounds {}.", dim, pred.p->shape.size()));
 
       auto n = pred.p->num_el;
       auto &pdata = pred.p->data, &tdata = target.p->data;
 
       for (size_t i = 0; i < n; i++) {
         const dtype y = tdata[i], p = pdata[i];
-        if (y < 0 or y > 1)
-          throw std::invalid_argument("Malformed tensor data. Targets must lie in [0, 1].");
-        if (p < 0)
-          throw std::invalid_argument("Malformed tensor data. Probabilities must be non-negative.");
+        if (y < 0 or 1 < y)
+          throw std::invalid_argument("ce: malformed tensor data. targets must lie in [0, 1].");
+        if (p < 0 or 1 < p)
+          throw std::invalid_argument("ce: malformed tensor data. probabilities must lie in [0, 1].");
       }
 
       const auto slices = static_cast<double>(n) / pred.p->shape[dim];

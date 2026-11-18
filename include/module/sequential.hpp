@@ -2,6 +2,7 @@
 
 #include "module/base.hpp"
 #include "tensor/tensor.hpp"
+
 #include <initializer_list>
 #include <memory>
 #include <type_traits>

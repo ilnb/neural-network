@@ -1,5 +1,6 @@
 #include "activations/activations.hpp"
 #include "utils.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>

@@ -1,8 +1,10 @@
 #include "tensor/detail.hpp"
 #include "nn/detail.hpp"
 #include "tensor/tensor.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <vector>
 
 namespace NN::Detail {
@@ -14,13 +16,13 @@ namespace NN::Detail {
 
   Tensor sqrt(const Tensor &t) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("sqrt: empty tensor.");
     return map(t, [](auto x) { return std::sqrt(x); });
   }
 
   Tensor sum(const Tensor &t) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("sum: empty tensor.");
     return Tensor(std::ranges::fold_left(t.p->data, 0, std::plus<>()));
   }
 
@@ -28,12 +30,12 @@ namespace NN::Detail {
 
   Tensor expand(const Tensor &t, size_t dim, size_t size) {
     if (t.empty())
-      throw std::domain_error("Empty tensor.");
+      throw std::domain_error("expand: empty tensor.");
     auto &p = t.p;
     const auto &shape = p->shape;
     const size_t n = shape.size();
     if (dim > n)
-      throw std::out_of_range("Out of bounds axis.");
+      throw std::out_of_range(std::format("expand: dim {} is out of bounds {}.", dim, n));
 
     size_t inner = 1;
     for (size_t i = dim; i < n; i++)
@@ -61,10 +63,10 @@ namespace NN::Detail {
 
   Tensor reshape(const Tensor &t, std::vector<size_t> &&v) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("reshape: empty tensor.");
     auto &p = t.p;
     if (p->num_el != checked_num_el(v))
-      throw std::invalid_argument("Incompatible target shape.");
+      throw std::invalid_argument(std::format("reduce: cant reshape {} to {}", t.p->shape, v));
 
     Tensor x(std::move(v));
     x.p->data = p->data;
@@ -73,13 +75,13 @@ namespace NN::Detail {
 
   Tensor permute(const Tensor &t, const std::vector<size_t> &v) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("permute: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (v.size() != n)
-      throw std::invalid_argument("`perm` needs to be of the same size.");
+      throw std::invalid_argument(std::format("permute: v of size {} needs to be of the size {}.", v.size(), n));
     if (not std::ranges::is_permutation(v, std::views::iota(0uz, n)))
-      throw std::invalid_argument("`perm` is not a permutation.");
+      throw std::invalid_argument(std::format("permute: v {} is not a permutation.", v));
 
     std::vector<size_t> new_shape(n);
     for (size_t i = 0; i < n; i++)
@@ -101,11 +103,11 @@ namespace NN::Detail {
 
   Tensor transpose(const Tensor &t) {
     if (t.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("transpose: empty tensor.");
     auto &p = t.p;
     const size_t n = p->shape.size();
     if (n < 2)
-      throw std::domain_error("Tensor needs to be rank >= 2 for transpose.");
+      throw std::domain_error("tensor: tensor needs to be of rank >= 2.");
 
     auto perm = std::views::iota(0zu, n) | std::ranges::to<std::vector>();
     std::swap(perm[n - 2], perm[n - 1]);
@@ -114,15 +116,15 @@ namespace NN::Detail {
 
   Tensor cat(const Tensor &t, const Tensor &b, size_t dim) {
     if (t.empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("cat: empty tensor.");
     auto &p = t.p;
     if (dim >= p->shape.size())
-      throw std::out_of_range("dim is out of bounds.");
+      throw std::out_of_range(std::format("cat: dim {} is out of bounds {}.", dim, p->shape.size()));
     if (p->shape.size() != b.p->shape.size())
-      throw std::invalid_argument("b is not of the same rank.");
+      throw std::invalid_argument(std::format("cat: b (rank {}) is needs to be of rank {}.", b.p->shape.size(), p->shape.size()));
     for (size_t i = 0; i < p->shape.size(); i++)
       if (i != dim and p->shape[i] != b.p->shape[i])
-        throw std::invalid_argument("Dimensions other than dim should be equal.");
+        throw std::invalid_argument("cat: dimensions other than dim should be equal.");
 
     size_t inner = 1;
     for (size_t i = dim + 1; i < p->shape.size(); i++)
@@ -159,14 +161,14 @@ namespace NN::Detail {
 
   Tensor stack(const Tensor &t, const Tensor &b, size_t dim) {
     if (t.empty() or b.empty())
-      throw std::invalid_argument("Empty tensor.");
+      throw std::invalid_argument("stack: empty tensor.");
     auto &p = t.p;
     auto &shape = p->shape;
     const size_t n = shape.size();
     if (dim > n)
-      throw std::out_of_range("dim is out of bounds.");
+      throw std::out_of_range(std::format("stack: dim {} is out of bounds {}.", dim, n));
     if (shape != b.p->shape)
-      throw std::invalid_argument("b is not of the same shape.");
+      throw std::invalid_argument(std::format("stack: b of shape {} needs to be of the shape {}.", b.p->shape, shape));
 
     const size_t axis = dim < n ? shape[dim] : 1;
     size_t inner = 1;
@@ -216,12 +218,105 @@ namespace NN::Detail {
     return r;
   }
 
+  void matmul_into(const dtype *a, const dtype *b, dtype *dst, size_t cnt, size_t m, size_t k, size_t n, const dtype *bias) {
+    if (cnt == 0 or m == 0 or n == 0)
+      return;
+
+    // 8 output rows by 4 columns held in registers for the whole reduction: the
+    // 4-wide slice of `b` is loaded once per tap and reused by all 8 rows, which
+    // is what turns this from a memory-bound loop into a compute-bound one.
+    // Reducing over `t` in one ascending pass keeps every element bit-identical
+    // to the reference product.
+    constexpr size_t IR = 8, JR = 4;
+    const size_t it = m / IR, jt = n / JR;
+    const size_t i_full = it * IR, j_full = jt * JR;
+    const size_t work = cnt * m * n * k;
+
+    if (i_full > 0 and j_full > 0) {
+#pragma omp parallel for collapse(3) schedule(static) if (work > 1'000'000)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t ib = 0; ib < it; ib++) {
+          for (size_t jb = 0; jb < jt; jb++) {
+            const size_t i0 = ib * IR, j0 = jb * JR;
+            const dtype *brow = b + (idx * k) * n + j0;
+
+            dtype acc[IR][JR];
+            for (size_t r = 0; r < IR; r++)
+#pragma omp simd
+              for (size_t j = 0; j < JR; j++)
+                acc[r][j] = 0;
+
+            for (size_t t = 0; t < k; t++) {
+              const dtype *bt = brow + t * n;
+              dtype bv[JR];
+#pragma omp simd
+              for (size_t j = 0; j < JR; j++)
+                bv[j] = bt[j];
+
+              for (size_t r = 0; r < IR; r++) {
+                const dtype av = a[(i0 + r) * k + t];
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  acc[r][j] += av * bv[j];
+              }
+            }
+
+            // Bias epilogue: folded into the store, so it costs no extra pass.
+            for (size_t r = 0; r < IR; r++) {
+              dtype *crow = dst + (idx * m + i0 + r) * n + j0;
+              if (bias) {
+                const dtype bv = bias[i0 + r];
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  crow[j] = acc[r][j] + bv;
+              } else {
+#pragma omp simd
+                for (size_t j = 0; j < JR; j++)
+                  crow[j] = acc[r][j];
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Edges that the register tiles do not cover. These are at most IR-1 rows
+    // and JR-1 columns, so the plain scalar loop is fine.
+    if (j_full < n) {
+#pragma omp parallel for collapse(2) schedule(static)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t i = 0; i < i_full; i++) {
+          for (size_t j = j_full; j < n; j++) {
+            dtype sum = 0;
+            for (size_t t = 0; t < k; t++)
+              sum += a[i * k + t] * b[(idx * k + t) * n + j];
+            dst[(idx * m + i) * n + j] = bias ? sum + bias[i] : sum;
+          }
+        }
+      }
+    }
+
+    if (i_full < m) {
+#pragma omp parallel for collapse(2) schedule(static)
+      for (size_t idx = 0; idx < cnt; idx++) {
+        for (size_t i = i_full; i < m; i++) {
+          for (size_t j = 0; j < n; j++) {
+            dtype sum = 0;
+            for (size_t t = 0; t < k; t++)
+              sum += a[i * k + t] * b[(idx * k + t) * n + j];
+            dst[(idx * m + i) * n + j] = bias ? sum + bias[i] : sum;
+          }
+        }
+      }
+    }
+  }
+
   Tensor matmul(const Tensor &t, const Tensor &b) {
     Tensor::validate(t, b);
     auto &p = t.p;
     auto &shape = p->shape, &bshape = b.p->shape;
     if (shape.size() < 2 or bshape.size() < 2)
-      throw std::domain_error("Cant matmul with a scalar.");
+      throw std::domain_error("matmul: Cant matmul with a scalar.");
 
     const size_t arank = shape.size(), brank = bshape.size();
     const size_t m = shape[arank - 2];
@@ -231,7 +326,7 @@ namespace NN::Detail {
     // A: [..., m, k]
     // B: [..., k, n]
     if (k != bshape[brank - 2])
-      throw std::invalid_argument("Incompatible tensors for matmul.");
+      throw std::invalid_argument(std::format("matmul: Incompatible tensors of shape {} and {}", t.p->shape, b.p->shape));
 
     auto a_shape = std::span(shape).first(shape.size() - 2);
     auto b_shape = std::span(bshape).first(bshape.size() - 2);
@@ -272,10 +367,24 @@ namespace NN::Detail {
 
     std::vector<dtype> out(cnt * m * n);
 
-    size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
-    size_t b1 = bstrides[brank - 1], b2 = bstrides[brank - 2];
+    const size_t a1 = strides[arank - 1], a2 = strides[arank - 2];
+    const size_t b1 = bstrides[brank - 1], b2 = bstrides[brank - 2];
 
     auto &data = p->data, &bdata = b.p->data;
+
+    // Fast path: both operands are contiguous along their trailing axis and `a`
+    // is shared across the batch, which is what every layer in this library
+    // produces. Anything else (multi-axis batch broadcast, strided views) falls
+    // back to the general loop below.
+    const bool a_shared = std::ranges::all_of(a_bs, [](size_t s) { return s == 0; });
+    const bool b_flat = br == 0 or (br == 1 and b_bs[0] == k * n);
+    if (a1 == 1 and a2 == k and b1 == 1 and b2 == n and a_shared and b_flat) {
+      matmul_into(data.data(), bdata.data(), out.data(), cnt, m, k, n);
+      Tensor ret(std::move(batch));
+      ret.p->data = std::move(out);
+      return ret;
+    }
+
     for (size_t idx = 0; idx < cnt; idx++) {
       size_t a_off = 0, b_off = 0, tmp = idx;
       for (size_t d = br; d-- > 0;) {
