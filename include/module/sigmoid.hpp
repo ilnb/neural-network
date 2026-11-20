@@ -5,9 +5,7 @@
 #include "tensor/tensor.hpp"
 
 namespace NN {
-  struct Sigmoid : Module {
-    Tensor forward(const Tensor &x) override { return NN::Act::sigmoid(x); }
-
-    std::vector<Tensor> params() const override { return {}; }
+  struct Sigmoid : Stateless {
+    Tensor forward(const Tensor &x) override { return Act::sigmoid(x); }
   };
 } // namespace NN

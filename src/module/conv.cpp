@@ -15,6 +15,12 @@ using NN::Autograd::GradFn, NN::Autograd::accumulate;
 namespace CD = NN::Conv::Detail;
 
 namespace NN {
+  std::vector<NamedTensor> Conv2d::named_params() const {
+    if (cfg.bias)
+      return { { "w", w }, { "b", b } };
+    return { { "w", w } };
+  }
+
   Tensor Conv2d::forward(const Tensor &x) {
     if (x.empty())
       throw std::invalid_argument("Conv2d::forward: empty tensor.");

@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <vector>
 
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
+
 namespace NN {
   // Inverted dropout.
   //
@@ -23,7 +25,7 @@ namespace NN {
   //
   // Throws `std::invalid_argument` if `p` is not finite or lies outside
   // `[0, 1)`.
-  struct Dropout : Module {
+  struct Dropout : Stateless {
     dtype p;
     // Keep mask of the last forward; emptied once the backward node takes it.
     std::vector<bool> mask;
@@ -34,8 +36,6 @@ namespace NN {
       if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
         throw std::invalid_argument(std::format("Dropout: probability {} must be in [0, 1)).", p));
     }
-
-    std::vector<Tensor> params() const override { return {}; }
 
     Tensor forward(const Tensor &x) override {
       if (!training or !p)
@@ -54,7 +54,7 @@ namespace NN {
       }
 
       if (x.p->requires_grad) {
-        auto fn = std::make_shared<NN::Autograd::GradFn>();
+        auto fn = std::make_shared<GradFn>();
         fn->inputs = { x.p };
         fn->backward = [ap = x.p, mask = std::move(mask), scale](const Tensor &dz) {
           if (!ap->requires_grad)
@@ -63,7 +63,7 @@ namespace NN {
           auto &xd = dx.p->data, &zd = dz.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
             xd[i] = zd[i] * mask[i] * scale;
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         };
         r.p->grad_fn = std::move(fn);
         r.p->requires_grad = true;

@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace NN {
-  struct Linear : Module {
+  struct Linear : ParamOnly {
     Tensor w, b;
     std::mt19937 rng;
 
@@ -22,6 +22,6 @@ namespace NN {
     }
 
     Tensor forward(const Tensor &x) override { return x.matmul(w) + b; }
-    std::vector<Tensor> params() const override { return { w, b }; }
+    std::vector<NamedTensor> named_params() const override { return { { "w", w }, { "b", b } }; }
   };
 } // namespace NN

@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace NN {
-  struct Conv2d : Module {
+  struct Conv2d : ParamOnly {
     struct Config {
       size_t stride = 1;
       size_t padding = 0;
@@ -50,10 +50,6 @@ namespace NN {
 
     Tensor forward(const Tensor &x) override;
 
-    std::vector<Tensor> params() const override {
-      if (cfg.bias)
-        return { w, b };
-      return { w };
-    }
+    std::vector<NamedTensor> named_params() const override;
   };
 } // namespace NN

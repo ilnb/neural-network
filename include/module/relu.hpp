@@ -5,9 +5,7 @@
 #include "tensor/tensor.hpp"
 
 namespace NN {
-  struct ReLU : Module {
-    Tensor forward(const Tensor &x) override { return NN::Act::relu(x); }
-
-    std::vector<Tensor> params() const override { return {}; }
+  struct ReLU : Stateless {
+    Tensor forward(const Tensor &x) override { return Act::relu(x); }
   };
 } // namespace NN

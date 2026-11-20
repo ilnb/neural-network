@@ -23,6 +23,7 @@ add_library(neural SHARED
   src/module/conv.cpp
   src/module/conv_detail.cpp
   src/module/maxpool2d.cpp
+  src/module/sequential.cpp
 )
 
 add_compile_options(

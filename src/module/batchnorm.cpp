@@ -8,6 +8,10 @@
 #include <vector>
 
 namespace NN {
+  std::vector<NamedTensor> BatchNorm::named_params() const { return { { "gamma", gamma }, { "beta", beta } }; }
+
+  std::vector<NamedTensor> BatchNorm::named_buffers() const { return { { "running_mean", running_mean }, { "running_var", running_var } }; }
+
   Tensor BatchNorm::forward(const Tensor &x) {
     if (x.empty())
       throw std::invalid_argument("BatchNorm::forward: empty tensor.");
@@ -61,7 +65,6 @@ namespace NN {
     }
 
     Tensor r(shape);
-
     std::vector<dtype> xhat(xn);
     auto &yd = r.p->data;
     auto &gd = gamma.p->data, &bd = beta.p->data;
@@ -102,11 +105,13 @@ namespace NN {
           }
           accumulate(*ap, dx);
         }
+
         if (ag->requires_grad) {
           Tensor t(ag->shape);
           t.p->data = std::move(dgamma);
           accumulate(*ag, t);
         }
+
         if (ab->requires_grad) {
           Tensor t(ab->shape);
           t.p->data = std::move(dbeta);
