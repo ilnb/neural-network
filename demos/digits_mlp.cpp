@@ -1,3 +1,8 @@
+// Handwritten digits (8x8 grey levels) through a small MLP.
+//
+// `assets/digits.csv` holds 64 pixel columns followed by the label. Pixels are
+// 0..16 in the file and are divided by 16 on load, and each label is expanded
+// to a one-hot row because the loss classifies over the 10 classes.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -104,6 +109,7 @@ int main() {
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // The classifier returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Linear(64, 16, 0),

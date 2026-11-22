@@ -1,3 +1,7 @@
+// Handwritten digits (8x8 grey levels) through two convolutions.
+//
+// Same data and setup as digits_mlp, but the 64 pixels are viewed as a single
+// 1x8x8 image so the conv layers get a spatial layout instead of a flat vector.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -107,6 +111,9 @@ int main() {
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // Both convolutions use padding 1 and stride 1, so the spatial extent stays
+  // 8x8 and Flatten hands the classifier 16 channels of 8x8. The classifier
+  // returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Conv2d(1, 8, 3, { .padding = 1, .seed = 0 }),

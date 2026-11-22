@@ -1,3 +1,8 @@
+// MNIST through three convolutions: the demo the library is benchmarked on.
+//
+// `assets/mnist_784.csv` holds 784 pixel columns plus a label; each row is
+// viewed as a single 1x28x28 image. The pixels are stored as raw 0..255
+// integers and are are divided by 255 on load.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -108,6 +113,9 @@ int main() {
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // Padding 1 keeps the extent and each 2x2 pool halves it (floored), so
+  // 28 -> 14 -> 7 -> 3 and the classifier sees 64 channels of 3x3. The
+  // classifier returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Conv2d(1, 32, 3, { .padding = 1, .seed = 0 }),
