@@ -6,7 +6,6 @@
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
 
 #include <algorithm>
@@ -113,8 +112,7 @@ int main() {
     Linear(16, 16, 0),
     BatchNorm1d(16),
     ReLU(),
-    Linear(16, 10, 0),
-    Softmax(1)
+    Linear(16, 10, 0)
       // clang-format on
   );
 

@@ -22,17 +22,19 @@ namespace NN::Loss {
   // `[0, 1]`.
   Tensor bce(const Tensor &pred, const Tensor &target);
 
-  // Cross entropy along the classification axis `dim`:
-  // `-(1/slices) * sum_i t_i log p_i`, with `slices = num_el / shape[dim]`,
-  // so the loss is averaged over the slices.
+  // Cross entropy along the classification axis `dim`, taking logits:
+  // `-(1/slices) * sum_i t_i log softmax(x)_i`, with
+  // `slices = num_el / shape[dim]`, so the loss is averaged over the slices.
   //
-  // Targets are soft labels in `[0, 1]`; a zero target contributes nothing.
-  // Probabilities must be non-negative, and `p_i == 0` with `t_i > 0` gives
-  // `inf`.
+  // Softmax is applied internally, subtracting the maximum logit before
+  // exponentiating, so logits of any magnitude are accepted and the backward
+  // pass never divides by a probability. Targets are soft labels in `[0, 1]`;
+  // a zero target contributes nothing. A `-inf` logit with target mass gives
+  // `inf`, and NaN logits propagate to the result.
   //
   // Throws `std::out_of_range` if `dim >= rank`, and `std::invalid_argument`
-  // if either tensor is empty or malformed, the shapes differ, a target lies
-  // outside `[0, 1]`, or a probability is negative.
+  // if either tensor is empty or malformed, the shapes differ, or a target lies
+  // outside `[0, 1]`.
   Tensor ce(const Tensor &pred, const Tensor &target, size_t dim);
 
   // CE loss over the last axis. `pred` must have at least one axis.

@@ -26,7 +26,7 @@ int main() {
 
   Data::DataLoader dl(Data::TensorDataset(x, y), { .batch_size = 2, .shuf = true, .seed = 0 });
 
-  for (size_t e = 0; e < 500; e++) {
+  for (size_t e = 0; e < 1500; e++) {
     model.train();
     Tensor loss;
     for (auto [x_b, y_b] : dl.epoch()) {

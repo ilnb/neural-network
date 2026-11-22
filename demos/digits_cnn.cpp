@@ -8,7 +8,6 @@
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
 
 #include <algorithm>
@@ -117,8 +116,7 @@ int main() {
     BatchNorm2d(16),
     ReLU(),
     Flatten(),
-    Linear(16 * 8 * 8, 10, 0),
-    Softmax(1)
+    Linear(16 * 8 * 8, 10, 0)
       // clang-format on
   );
 

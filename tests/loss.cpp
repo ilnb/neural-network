@@ -32,56 +32,60 @@ static void test_bce_edges() {
 }
 
 static void test_ce_values() {
-  Tensor pred = mk({ 2, 3 }, { 0.09003057f, 0.24472847f, 0.66524096f, 0.3333333f, 0.3333333f, 0.3333333f });
+  Tensor pred = mk({ 2, 3 }, { 1, 2, 3, 0, 0, 0 });
   Tensor target = mk({ 2, 3 }, { 0, 0, 1, 1, 0, 0 });
 
   check_close(Loss::ce(pred, target).item(), 0.7531091f, 1e-6f, "ce: defaults to the last axis");
   check_close(Loss::ce(pred, target, 1).item(), 0.7531091f, 1e-6f, "ce: dim=1 explicit");
-  check_close(Loss::ce(mk({ 2 }, { 0.3f, 0.7f }), mk({ 2 }, { 0, 1 })).item(), 0.3566749f, 1e-6f, "ce: rank-1 defaults to dim=0");
+  check_close(Loss::ce(mk({ 2 }, { 0, 1 }), mk({ 2 }, { 0, 1 })).item(), 0.3132617f, 1e-6f, "ce: rank-1 defaults to dim=0");
 }
 
 static void test_ce_axes() {
-  Tensor pred = mk({ 2, 3 }, { 0.2f, 0.3f, 0.4f, 0.8f, 0.7f, 0.6f });
+  Tensor pred = mk({ 2, 3 }, { 0, 0, 0, 1, 1, 1 });
   Tensor target = mk({ 2, 3 }, { 1, 0, 1, 0, 1, 0 });
-  check_close(Loss::ce(pred, target, 0).item(), 0.9608012f, 1e-6f, "ce: dim=0 sums over rows");
+  check_close(Loss::ce(pred, target, 0).item(), 0.9799284f, 1e-6f, "ce: dim=0 sums over rows");
 }
 
 static void test_ce_rank3() {
-  Tensor pred = mk({ 2, 3, 2 }, { 0.2f, 0.5f, 0.3f, 0.25f, 0.5f, 0.25f, 0.1f, 0.3333333f, 0.1f, 0.3333333f, 0.8f, 0.3333333f });
-  Tensor target = mk({ 2, 3, 2 }, { 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1 });
-  check_close(Loss::ce(pred, target, 1).item(), 1.1968729f, 1e-6f, "ce: dim=1 averages over the remaining axes");
+  Tensor pred = mk({ 2, 3, 2 }, { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f });
+  Tensor target = mk({ 2, 3, 2 }, { 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1 });
+  check_close(Loss::ce(pred, target, 1).item(), 1.1119014f, 1e-6f, "ce: dim=1 averages over the remaining axes");
 }
 
-static void test_ce_soft_labels() { check_close(Loss::ce(mk({ 1, 2 }, { 0.5f, 0.5f }), mk({ 1, 2 }, { 0.25f, 0.75f })).item(), 0.6931472f, 1e-6f, "ce: soft labels"); }
+static void test_ce_soft_labels() { check_close(Loss::ce(mk({ 1, 2 }, { 0, 0 }), mk({ 1, 2 }, { 0.25f, 0.75f })).item(), 0.6931472f, 1e-6f, "ce: soft labels"); }
 
 static void test_ce_binary_matches_bce() {
-  Tensor pred = mk({ 2, 2 }, { 0.3f, 0.7f, 0.9f, 0.1f });
+  Tensor pred = mk({ 2, 2 }, { 0, 1, 1, 0 });
   Tensor target = mk({ 2, 2 }, { 0, 1, 1, 0 });
   const dtype ce = Loss::ce(pred, target, 1).item();
-  const dtype bce = Loss::bce(mk({ 2 }, { 0.7f, 0.1f }), mk({ 2 }, { 1, 0 })).item();
+
+  Tensor probs = NN::Act::softmax(pred, 1);
+  const dtype bce = Loss::bce(mk({ 2 }, { probs.p->data[1], probs.p->data[3] }), mk({ 2 }, { 1, 0 })).item();
 
   check_close(ce, bce, 1e-6f, "ce with C=2 equals bce on the positive class");
-  check_close(Loss::ce(mk({ 1, 2 }, { 0.3f, 0.7f }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0.3566749f, 1e-6f, "ce with C=2 matches bce for a single sample");
+  check_close(Loss::ce(mk({ 1, 2 }, { 0, 1 }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0.3132617f, 1e-6f, "ce with C=2 matches bce for a single sample");
 }
 
 static void test_ce_edges() {
-  check(std::isinf(Loss::ce(mk({ 1, 2 }, { 0, 1 }), mk({ 1, 2 }, { 1, 0 }), 1).item()), "ce: p=0 with target mass -> inf");
-  check_close(Loss::ce(mk({ 1, 2 }, { 0, 1 }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0, 0, "ce: p=0 with y=0 is ignored");
+  const dtype ninf = -std::numeric_limits<dtype>::infinity();
+  check(std::isinf(Loss::ce(mk({ 1, 2 }, { ninf, 0 }), mk({ 1, 2 }, { 1, 0 }), 1).item()), "ce: -inf logit with target mass -> inf");
+  check_close(Loss::ce(mk({ 1, 2 }, { ninf, 0 }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0, 0, "ce: -inf logit with y=0 is ignored");
+  check_close(Loss::ce(mk({ 1, 2 }, { -1000, 1000 }), mk({ 1, 2 }, { 0, 1 }), 1).item(), 0, 0, "ce: saturated logits give a finite loss");
 }
 
 static void test_ce_zero_target_grad() {
-  // A zero target whose probability underflowed to 0 must not produce 0/0.
+  // A zero target must not produce 0/0 in the gradient.
   const Tensor target = mk({ 1, 2 }, { 1, 0 });
 
   Tensor pred = mk_grad({ 1, 2 }, { 1, 0 });
   Loss::ce(pred, target).backward();
   const auto &g = pred.p->grad->p->data;
-  check_close(g[0], -1, 1e-6f, "ce: non-zero target still contributes");
-  check_close(g[1], 0, 0, "ce: zero target with p=0 has zero gradient");
+  check_close(g[0], -0.2689414f, 1e-6f, "ce: non-zero target still contributes");
+  check_close(g[1], 0.2689414f, 1e-6f, "ce: zero target still gets its gradient");
 
-  // Through softmax, saturated logits give dlogits = p - t = 0, not NaN.
+  // Saturated logits give dlogits = p - t = 0, not NaN.
   Tensor logits = mk_grad({ 1, 2 }, { 1000, -1000 });
-  Loss::ce(NN::Act::softmax(logits, 1), target).backward();
+  Loss::ce(logits, target).backward();
   const auto &lg = logits.p->grad->p->data;
   check_close(lg[0], 0, 0, "ce: saturated true-class dlogit is zero");
   check_close(lg[1], 0, 0, "ce: saturated other-class dlogit is zero");
@@ -92,16 +96,18 @@ static void test_validation_order() {
   // An `inf` result must not hide malformed entries that follow it.
   check_throws<std::invalid_argument>([&] { (void)Loss::bce(mk({ 2 }, { 0, 0.5f }), mk({ 2 }, { 1, 0.3f })); }, "bce: inf must not hide a later malformed target");
 
-  check_throws<std::invalid_argument>([&] { (void)Loss::ce(mk({ 1, 2 }, { 0, 0.5f }), mk({ 1, 2 }, { 1, 1.3f }), 1); }, "ce: inf must not hide a later malformed target");
+  const dtype ninf = -std::numeric_limits<dtype>::infinity();
+  check_throws<std::invalid_argument>([&] { (void)Loss::ce(mk({ 1, 2 }, { ninf, 0 }), mk({ 1, 2 }, { 1, 1.3f }), 1); }, "ce: inf must not hide a later malformed target");
 
-  // Probabilities are validated even where the target mass is zero.
-  check_throws<std::invalid_argument>([&] { (void)Loss::ce(mk({ 1, 2 }, { -0.5f, 1.5f }), mk({ 1, 2 }, { 0, 1 }), 1); }, "ce: validates probabilities on zero-target entries");
+  // Logits have no range restriction, so large values are fine.
+  check(std::isfinite(Loss::ce(mk({ 1, 2 }, { -50, 50 }), mk({ 1, 2 }, { 0, 1 }), 1).item()), "ce: logits outside [0, 1] are accepted");
 
-  // bce needs p in [0, 1] because it takes log(p) and log(1 - p).
+  // bce still needs p in [0, 1] because it takes log(p) and log(1 - p).
   check_throws<std::invalid_argument>([&] { (void)Loss::bce(mk({ 2 }, { -0.5f, 1.5f }), mk({ 2 }, { 0, 1 })); }, "bce: probabilities outside [0, 1] throw");
 
   // ...but NaN must still propagate rather than throw.
   check(std::isnan(Loss::bce(mk({ 1 }, { std::numeric_limits<dtype>::quiet_NaN() }), mk({ 1 }, { 1 })).item()), "bce: NaN prediction propagates");
+  check(std::isnan(Loss::ce(mk({ 1, 2 }, { std::numeric_limits<dtype>::quiet_NaN(), 0 }), mk({ 1, 2 }, { 0, 1 }), 1).item()), "ce: NaN logit propagates");
 }
 
 static void test_errors() {

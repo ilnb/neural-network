@@ -9,7 +9,6 @@
 #include "module/maxpool2d.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
 
 #include <algorithm>
@@ -75,7 +74,7 @@ int main() {
     const size_t w = 28, h = 28;
     std::ifstream f("assets/mnist_784.csv");
     if (!f) {
-      std::println(stderr, "Not able to open digits.csv");
+      std::println(stderr, "Not able to open mnist_784.csv");
       exit(1);
     }
     std::vector<dtype> feats, labels;
@@ -91,7 +90,7 @@ int main() {
         if (err_c != std::errc())
           throw std::runtime_error("bad number on line " + std::to_string(lines + 1));
         if (col < w * h)
-          feats.push_back(v / 16);
+          feats.push_back(v / 255);
         else if (col == w * h)
           labels.push_back(v);
         col++;
@@ -124,8 +123,7 @@ int main() {
     MaxPool2d(2),
     ReLU(),
     Flatten(),
-    Linear(64 * 3 * 3, 10, 0),
-    Softmax(1)
+    Linear(64 * 3 * 3, 10, 0)
       // clang-format on
   );
 

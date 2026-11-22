@@ -14,7 +14,7 @@ print(f"Pixel range: {X.min():.0f} to {X.max():.0f}")
 data = np.column_stack([X, y]).astype(np.int64)  # label is the last column
 print(f"Combined array: {data.shape}")
 
-path = os.path.join("demos", "digits.csv")
+path = os.path.join("assets", "digits.csv")
 print(f"Saving to {path}...")
 np.savetxt(path, data, fmt="%d", delimiter=",")
 print(f"  wrote {len(data)} rows, {os.path.getsize(path) / 1e3:.1f} KB")

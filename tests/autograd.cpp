@@ -308,10 +308,10 @@ static void test_loss_targets() {
     check_grad(t, { 0, -1.0986123f }, "bce target grad: log((1-p)/p)/n", 1e-5f);
   }
   {
-    Tensor p = mk_grad({ 2, 3 }, { 0.09003057f, 0.24472847f, 0.66524096f, 0.3333333f, 0.3333333f, 0.3333333f });
+    Tensor p = mk_grad({ 2, 3 }, { 1, 2, 3, 0, 0, 0 });
     Tensor t = mk_grad({ 2, 3 }, { 0, 0, 1, 1, 0, 0 });
     Loss::ce(p, t).backward();
-    check_grad(t, { 1.203803f, 0.703803f, 0.203803f, 0.5493062f, 0.5493062f, 0.5493062f }, "ce target grad: -log(p)/slices", 1e-5f);
+    check_grad(t, { 1.203803f, 0.703803f, 0.203803f, 0.5493062f, 0.5493062f, 0.5493062f }, "ce target grad: lse(x) - x over slices", 1e-5f);
   }
   {
     Tensor p = mk({ 1 }, { 0.5f });
@@ -340,12 +340,12 @@ static void test_losses() {
     check_grad(p, { 1, -0.5555556f }, "bce: grad is (p-t)/(n p (1-p))");
   }
   {
-    Tensor p = mk_grad({ 2, 3 }, { 0.09003057f, 0.24472847f, 0.66524096f, 0.3333333f, 0.3333333f, 0.3333333f });
+    Tensor p = mk_grad({ 2, 3 }, { 1, 2, 3, 0, 0, 0 });
     Tensor t = mk({ 2, 3 }, { 0, 0, 1, 1, 0, 0 });
     auto loss = Loss::ce(p, t);
     check_close(loss.item(), 0.7531091f, 1e-6f, "ce: value");
     loss.backward();
-    check_grad(p, { 0, 0, -0.751615f, -1.5f, 0, 0 }, "ce: grad is -t/(C p) averaged over slices", 1e-5f);
+    check_grad(p, { 0.0450153f, 0.1223642f, -0.1673795f, -0.3333333f, 0.1666667f, 0.1666667f }, "ce: grad is softmax - target, averaged over slices", 1e-5f);
   }
 }
 
