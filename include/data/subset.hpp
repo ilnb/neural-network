@@ -52,7 +52,7 @@ namespace NN::Data {
     //
     // Throws `std::out_of_range` if an entry of `i` is not a valid subset
     // position, and `std::invalid_argument` if `i` is empty.
-    std::pair<Tensor, Tensor> batch(std::span<const size_t> i) const override {
+    [[nodiscard]] std::pair<Tensor, Tensor> batch(std::span<const size_t> i) const override {
       std::vector<size_t> mapped;
       mapped.reserve(i.size());
       for (const size_t k : i) {

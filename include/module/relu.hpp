@@ -6,6 +6,6 @@
 
 namespace NN {
   struct ReLU : Stateless {
-    Tensor forward(const Tensor &x) override { return Act::relu(x); }
+    [[nodiscard]] Tensor forward(const Tensor &x) override { return Act::relu(x); }
   };
 } // namespace NN

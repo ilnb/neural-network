@@ -12,7 +12,7 @@ namespace NN::Autograd {
   //
   // Throws `std::invalid_argument` if `shape` has higher rank than `g` or if
   // the two are not broadcast-compatible.
-  Tensor sum_to_shape(const Tensor &g, const std::vector<size_t> &shape);
+  [[nodiscard]] Tensor sum_to_shape(const Tensor &g, const std::vector<size_t> &shape);
 
   // Adds `g` into `p.grad`. `g` may carry a graph node; it is read as raw data,
   // so backward rules can pass composite results without building new nodes.

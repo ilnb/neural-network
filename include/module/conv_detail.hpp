@@ -18,14 +18,14 @@ namespace NN::Conv::Detail {
   };
 
   // x: [N, C, H, W] -> [N, K, H_out * W_out], zero padded, K = C*kh*kw.
-  Tensor im2col(const Tensor &x, const Geometry &g);
+  [[nodiscard]] Tensor im2col(const Tensor &x, const Geometry &g);
 
   // Fills `col` in place, resizing if needed. Lets a caller recycle
   // one buffer across the steps instead of reallocing every forward.
   void im2col(const Tensor &x, const Geometry &g, Tensor &col);
 
   // Adjoint of `im2col`, accumulating into a zeroed `dx`: [N, C, H, W].
-  Tensor col2im(const Tensor &dcol, const Geometry &g);
+  [[nodiscard]] Tensor col2im(const Tensor &dcol, const Geometry &g);
 
   // Pointer form, for callers that own the buffers.
   //

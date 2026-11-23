@@ -48,7 +48,7 @@ namespace NN {
 
     Conv2d(size_t in, size_t out, size_t kernel) : Conv2d(in, out, kernel, kernel) {}
 
-    Tensor forward(const Tensor &x) override;
+    [[nodiscard]] Tensor forward(const Tensor &x) override;
 
     std::vector<NamedTensor> named_params() const override;
   };

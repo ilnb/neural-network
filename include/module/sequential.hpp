@@ -37,7 +37,7 @@ namespace NN {
 
     Tensor operator()(const Tensor &x) { return forward(x); }
 
-    Tensor forward(const Tensor &x) override;
+    [[nodiscard]] Tensor forward(const Tensor &x) override;
 
     std::vector<NamedTensor> named_params() const override;
 

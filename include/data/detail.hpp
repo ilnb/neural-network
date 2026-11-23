@@ -15,5 +15,5 @@ namespace NN::Data::Detail {
   //
   // Throws `std::invalid_argument` if `ts` is empty, or if the tensors do not
   // all share a shape.
-  Tensor stack(const std::vector<Tensor> &ts);
+  [[nodiscard]] Tensor stack(const std::vector<Tensor> &ts);
 } // namespace NN::Data::Detail

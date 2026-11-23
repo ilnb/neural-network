@@ -21,7 +21,7 @@ namespace NN {
       b.set_requires_grad(true);
     }
 
-    Tensor forward(const Tensor &x) override { return x.matmul(w) + b; }
+    [[nodiscard]] Tensor forward(const Tensor &x) override { return x.matmul(w) + b; }
     std::vector<NamedTensor> named_params() const override { return { { "w", w }, { "b", b } }; }
   };
 } // namespace NN

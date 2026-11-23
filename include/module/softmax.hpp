@@ -8,6 +8,6 @@ namespace NN {
   struct Softmax : Stateless {
     size_t dim;
     Softmax(size_t dim) : dim(dim) {}
-    Tensor forward(const Tensor &x) override { return Act::softmax(x, dim); }
+    [[nodiscard]] Tensor forward(const Tensor &x) override { return Act::softmax(x, dim); }
   };
 } // namespace NN

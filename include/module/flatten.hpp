@@ -8,7 +8,7 @@
 
 namespace NN {
   struct Flatten : Stateless {
-    Tensor forward(const Tensor &x) override {
+    [[nodiscard]] Tensor forward(const Tensor &x) override {
       if (x.empty() || x.p->shape.empty())
         throw std::invalid_argument("Flatten::forward: non-empty batched tensor expected.");
 

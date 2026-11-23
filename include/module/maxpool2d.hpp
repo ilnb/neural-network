@@ -23,6 +23,6 @@ namespace NN {
 
     explicit MaxPool2d(size_t kernel) : MaxPool2d(kernel, kernel) {}
 
-    Tensor forward(const Tensor &x) override;
+    [[nodiscard]] Tensor forward(const Tensor &x) override;
   };
 } // namespace NN

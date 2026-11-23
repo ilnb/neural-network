@@ -37,7 +37,7 @@ namespace NN {
         throw std::invalid_argument(std::format("Dropout: probability {} must be in [0, 1)).", p));
     }
 
-    Tensor forward(const Tensor &x) override {
+    [[nodiscard]] Tensor forward(const Tensor &x) override {
       if (!training or !p)
         return x;
 

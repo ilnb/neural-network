@@ -6,6 +6,6 @@
 
 namespace NN {
   struct Sigmoid : Stateless {
-    Tensor forward(const Tensor &x) override { return Act::sigmoid(x); }
+    [[nodiscard]] Tensor forward(const Tensor &x) override { return Act::sigmoid(x); }
   };
 } // namespace NN

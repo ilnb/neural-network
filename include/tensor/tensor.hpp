@@ -22,16 +22,16 @@ namespace NN {
   // graph. Use the member ops / operators when gradients are wanted.
   namespace Raw {
     // Returns `a + b` with full broadcasting.
-    Tensor add(const Tensor &a, const Tensor &b);
+    [[nodiscard]] Tensor add(const Tensor &a, const Tensor &b);
 
     // Returns `a - b` with full broadcasting.
-    Tensor sub(const Tensor &a, const Tensor &b);
+    [[nodiscard]] Tensor sub(const Tensor &a, const Tensor &b);
 
     // Returns `a * b` element-wise with full broadcasting.
-    Tensor mul(const Tensor &a, const Tensor &b);
+    [[nodiscard]] Tensor mul(const Tensor &a, const Tensor &b);
 
     // Returns the matrix product `a * b`.
-    Tensor matmul(const Tensor &a, const Tensor &b);
+    [[nodiscard]] Tensor matmul(const Tensor &a, const Tensor &b);
   } // namespace Raw
 
   // An N-dimensional, contiguous, row-major tensor.
@@ -291,25 +291,25 @@ namespace NN {
     // `std::overflow_error` if the element count overflows `size_t`.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor reshape(R &&r) const {
+    [[nodiscard]] Tensor reshape(R &&r) const {
       return reshape(std::vector<size_t>(std::ranges::begin(r), std::ranges::end(r)));
     }
 
     // Takes the new shape as separate arguments.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor reshape(Args... args) const {
+    [[nodiscard]] Tensor reshape(Args... args) const {
       return reshape(std::vector{ static_cast<size_t>(args)... });
     }
 
-    Tensor reshape(std::vector<size_t> &&v) const;
+    [[nodiscard]] Tensor reshape(std::vector<size_t> &&v) const;
 
     // Swaps the last two axes. Ranks above 2 are supported; only the trailing
     // axes are exchanged and leading axes are left in place.
     //
     // Throws `std::invalid_argument` if the tensor is empty, and
     // `std::domain_error` if its rank is below 2.
-    Tensor transpose() const;
+    [[nodiscard]] Tensor transpose() const;
 
     // Concatenates `b` with the tensor along the existing dimension `dim`.
     // Every dimension is kept, and `dim` holds `shape[dim] + b.shape[dim]`.
@@ -319,7 +319,7 @@ namespace NN {
     // Throws `std::out_of_range` if `dim >= rank`, and `std::invalid_argument`
     // if the ranks differ, any dimension other than `dim` differs,
     // or either tensor is empty.
-    Tensor cat(const Tensor &b, size_t dim) const;
+    [[nodiscard]] Tensor cat(const Tensor &b, size_t dim) const;
 
     // Stacks `b` onto this tensor along a new dimension `dim`. The result has
     // rank + 1, with a size-2 axis inserted at `dim`; this tensor and `b` are
@@ -329,7 +329,7 @@ namespace NN {
     //
     // Throws `std::out_of_range` if `dim > rank`, and `std::invalid_argument`
     // if the shapes differ or either tensor is empty.
-    Tensor stack(const Tensor &b, size_t dim) const;
+    [[nodiscard]] Tensor stack(const Tensor &b, size_t dim) const;
 
     // Permutes tensor dimensions according to provided permutation.
     //
@@ -337,18 +337,18 @@ namespace NN {
     // a permutation, or if its size doesn't match the rank.
     template <typename R>
       requires ConvIntervalOf<R, size_t> and std::ranges::sized_range<R> and std::integral<std::ranges::range_value_t<R>>
-    Tensor permute(R &&r) const {
+    [[nodiscard]] Tensor permute(R &&r) const {
       return permute(std::vector<size_t>(std::ranges::begin(r), std::ranges::end(r)));
     }
 
     // Convenience form of `permute`.
     template <typename... Args>
       requires(std::integral<Args> and ...)
-    Tensor permute(Args... args) const {
+    [[nodiscard]] Tensor permute(Args... args) const {
       return permute(std::vector{ static_cast<size_t>(args)... });
     }
 
-    Tensor permute(std::vector<size_t> &&v) const;
+    [[nodiscard]] Tensor permute(std::vector<size_t> &&v) const;
 
     // True if the tensor has no backing storage, i.e. it was default
     // constructed or moved from.
@@ -368,7 +368,7 @@ namespace NN {
     // Safe to mutate without affecting the source.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor clone() const;
+    [[nodiscard]] Tensor clone() const;
 
     // Inserts a dimension of `size` at `dim`, expanding the tensor along that
     // dimension by repeating its data. The result has rank + 1; `dim` may
@@ -376,7 +376,7 @@ namespace NN {
     //
     // Throws `std::domain_error` for an empty tensor, `std::out_of_range` if
     // `dim > rank`, and `std::invalid_argument` if `size == 0`.
-    Tensor expand(size_t dim, size_t size) const;
+    [[nodiscard]] Tensor expand(size_t dim, size_t size) const;
 
     // Runs backpropagation from this tensor.
     //
@@ -410,70 +410,70 @@ namespace NN {
     // Return a copy of the tensor with all elememnts sqrt-ed.
     //
     // Throws `std::domain_error` for an empty tensor.
-    Tensor sqrt() const;
+    [[nodiscard]] Tensor sqrt() const;
 
     // Sum of all elements.
     //
     // Throws `std::domain_error` for an empty tensor.
-    Tensor sum() const;
+    [[nodiscard]] Tensor sum() const;
 
     // Mean of all elements.
     //
     // Throws `std::domain_error` for an empty tensor.
-    Tensor mean() const;
+    [[nodiscard]] Tensor mean() const;
 
     // Largest element.
     //
     // Throws `std::domain_error` for an empty tensor.
-    Tensor max() const;
+    [[nodiscard]] Tensor max() const;
 
     // Smallest element.
     //
     // Throws `std::domain_error` for an empty tensor.
-    Tensor min() const;
+    [[nodiscard]] Tensor min() const;
 
     // Reduces axis `dim` by summing. The axis is removed, so the rank
     // decreases by one. Returns a new tensor.
     //
     // Throws `std::out_of_range` if `dim >= rank`,
     // and `std::domain_error` for an empty tensor.
-    Tensor sum(size_t dim) const;
+    [[nodiscard]] Tensor sum(size_t dim) const;
 
     // Reduces axis `dim` by the mean. Returns a new tensor.
-    Tensor mean(size_t dim) const;
+    [[nodiscard]] Tensor mean(size_t dim) const;
 
     // Reduces axis `dim` by the maximum. Returns a new tensor.
-    Tensor max(size_t dim) const;
+    [[nodiscard]] Tensor max(size_t dim) const;
 
     // Reduces axis `dim` by the minimum. Returns a new tensor.
-    Tensor min(size_t dim) const;
+    [[nodiscard]] Tensor min(size_t dim) const;
 
     // Adds scalar `x` to every element; returns a new tensor.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor add(const dtype x) const;
+    [[nodiscard]] Tensor add(const dtype x) const;
 
     // Subtracts scalar `x` from every element; returns a new tensor.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor sub(const dtype x) const;
+    [[nodiscard]] Tensor sub(const dtype x) const;
 
     // Multiplies every element by scalar `x`; returns a new tensor.
     //
     // Throws `std::invalid_argument` if the tensor is empty.
-    Tensor mul(const dtype x) const;
+    [[nodiscard]] Tensor mul(const dtype x) const;
 
     // Element-wise add with full broadcasting; returns a new tensor.
     //
     // Throws `std::invalid_argument` if either tensor is empty, malformed, or
     // the shapes cannot broadcast.
-    Tensor add(const Tensor &b) const;
+    [[nodiscard]] Tensor add(const Tensor &b) const;
 
     // Element-wise subtract with full broadcasting; returns a new tensor.
-    Tensor sub(const Tensor &b) const;
+    [[nodiscard]] Tensor sub(const Tensor &b) const;
 
     // Element-wise multiply with full broadcasting; returns a new tensor.
-    Tensor mul(const Tensor &b) const;
+    [[nodiscard]] Tensor mul(const Tensor &b) const;
 
     // Matrix product; returns a new tensor.
     //
@@ -484,7 +484,7 @@ namespace NN {
     // Throws `std::domain_error` if either tensor is below rank 2, and
     // `std::invalid_argument` if the inner dimensions differ or the batch
     // dimensions cannot broadcast or if either tensor is empty or malformed.
-    Tensor matmul(const Tensor &b) const;
+    [[nodiscard]] Tensor matmul(const Tensor &b) const;
 
     // In-place adds scalar `x` to the tensor.
     Tensor &add_(const dtype x);
@@ -514,10 +514,10 @@ namespace NN {
     Tensor &mul_(const Tensor &b);
 
     // Unary negation; returns a new tensor.
-    Tensor operator-() const;
+    [[nodiscard]] Tensor operator-() const;
 
     // Adds scalar `x`; returns a new tensor.
-    Tensor operator+(const dtype x) const;
+    [[nodiscard]] Tensor operator+(const dtype x) const;
 
     // Adds scalar `x`; returns a new tensor.
     friend Tensor operator+(const dtype x, const Tensor &a);
@@ -526,7 +526,7 @@ namespace NN {
     Tensor &operator+=(const dtype x);
 
     // Subtracts scalar `x`; returns a new tensor.
-    Tensor operator-(const dtype x) const;
+    [[nodiscard]] Tensor operator-(const dtype x) const;
 
     // Subtracts the tensor from scalar `x`; returns a new tensor.
     friend Tensor operator-(const dtype x, const Tensor &a);
@@ -535,7 +535,7 @@ namespace NN {
     Tensor &operator-=(const dtype x);
 
     // Multiplies by scalar `x`; returns a new tensor.
-    Tensor operator*(const dtype x) const;
+    [[nodiscard]] Tensor operator*(const dtype x) const;
 
     // Multiplies scalar `x` by the tensor; returns a new tensor.
     friend Tensor operator*(const dtype x, const Tensor &a);
@@ -546,7 +546,7 @@ namespace NN {
     // Divides every element by scalar `x`; returns a new tensor.
     //
     // Throws `std::domain_error` if `x == 0`.
-    Tensor operator/(const dtype x) const;
+    [[nodiscard]] Tensor operator/(const dtype x) const;
 
     // Divides every element by scalar `x` in-place.
     //
@@ -554,19 +554,19 @@ namespace NN {
     Tensor &operator/=(const dtype x);
 
     // Element-wise add with full broadcasting; returns a new tensor.
-    Tensor operator+(const Tensor &b) const;
+    [[nodiscard]] Tensor operator+(const Tensor &b) const;
 
     // In-place element-wise add; `b` must broadcast into `*this`.
     Tensor &operator+=(const Tensor &b);
 
     // Element-wise subtract with full broadcasting; returns a new tensor.
-    Tensor operator-(const Tensor &b) const;
+    [[nodiscard]] Tensor operator-(const Tensor &b) const;
 
     // In-place element-wise subtract; `b` must broadcast into `*this`.
     Tensor &operator-=(const Tensor &b);
 
     // Element-wise multiply with full broadcasting.
-    Tensor operator*(const Tensor &b) const;
+    [[nodiscard]] Tensor operator*(const Tensor &b) const;
 
     // In-place element-wise multiply; `b` must broadcast into `*this`.
     Tensor &operator*=(const Tensor &b);
