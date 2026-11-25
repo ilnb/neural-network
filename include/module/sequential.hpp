@@ -15,11 +15,13 @@ namespace NN {
     Sequential() = default;
 
     template <typename... M>
+      requires((not std::same_as<std::remove_cvref_t<M>, Sequential>) and ...)
     Sequential(M &&...args) {
       (modules.push_back(std::make_unique<std::remove_cvref_t<M>>(std::forward<M>(args))), ...);
     }
 
     template <typename M>
+      requires(not std::same_as<std::remove_cvref_t<M>, Sequential>)
     Sequential(std::initializer_list<M> l) {
       for (auto &&m : l)
         modules.push_back(std::make_unique<std::remove_cvref_t<M>>(m));
