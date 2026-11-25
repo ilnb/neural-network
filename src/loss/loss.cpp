@@ -38,9 +38,9 @@ namespace NN::Loss {
 
       double ex = 0;
       for (size_t j = 0; j < len; j++)
-        ex += std::exp(static_cast<double>(x[j * stride]) - static_cast<double>(mx));
+        ex += std::exp(SC<double>(x[j * stride]) - SC<double>(mx));
 
-      return static_cast<double>(mx) + std::log(ex);
+      return SC<double>(mx) + std::log(ex);
     }
   } // namespace
 
@@ -128,7 +128,7 @@ namespace NN::Loss {
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {
         const auto &xdata = ap->data, &tdata = at->data;
         const auto ax = axis_info(ap->shape, dim);
-        const dtype scale = dz.p->data[0] / static_cast<dtype>(ax.outer * ax.inner);
+        const dtype scale = dz.p->data[0] / SC<dtype>(ax.outer * ax.inner);
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
@@ -145,8 +145,8 @@ namespace NN::Loss {
 
               for (size_t j = 0; j < ax.len; j++) {
                 const size_t i = base + j * ax.inner;
-                const double p = std::exp(static_cast<double>(xdata[i]) - lse);
-                xd[i] = static_cast<dtype>(scale * (tsum * p - static_cast<double>(tdata[i])));
+                const double p = std::exp(SC<double>(xdata[i]) - lse);
+                xd[i] = SC<dtype>(scale * (tsum * p - SC<double>(tdata[i])));
               }
             }
           }
@@ -164,7 +164,7 @@ namespace NN::Loss {
 
               for (size_t j = 0; j < ax.len; j++) {
                 const size_t i = base + j * ax.inner;
-                td[i] = static_cast<dtype>(-static_cast<double>(scale) * (static_cast<double>(xdata[i]) - lse));
+                td[i] = SC<dtype>(-SC<double>(scale) * (SC<double>(xdata[i]) - lse));
               }
             }
           }
@@ -188,10 +188,10 @@ namespace NN::Loss {
       auto n = pred.p->num_el;
       auto &pdata = pred.p->data, &tdata = target.p->data;
       for (size_t i = 0; i < n; i++) {
-        const double d = static_cast<double>(pdata[i]) - static_cast<double>(tdata[i]);
+        const auto d = SC<double>(pdata[i]) - SC<double>(tdata[i]);
         sum += d * d;
       }
-      return Tensor(static_cast<dtype>(sum / static_cast<double>(n)));
+      return Tensor(SC<dtype>(sum / SC<double>(n)));
     }
 
     Tensor bce(const Tensor &pred, const Tensor &target) {
@@ -227,7 +227,7 @@ namespace NN::Loss {
         sum -= y * std::log(p);
         sum -= (1 - y) * std::log(1 - p);
       }
-      return Tensor(static_cast<dtype>(sum / static_cast<double>(n)));
+      return Tensor(SC<dtype>(sum / SC<double>(n)));
     }
 
     Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
@@ -258,7 +258,7 @@ namespace NN::Loss {
             const double t = tdata[i];
             tsum += t;
             if (t != 0)
-              tx += t * static_cast<double>(xdata[i]);
+              tx += t * SC<double>(xdata[i]);
           }
           if (tsum == 0)
             continue;
@@ -267,7 +267,7 @@ namespace NN::Loss {
         }
       }
 
-      return Tensor(static_cast<dtype>(sum / static_cast<double>(ax.outer * ax.inner)));
+      return Tensor(SC<dtype>(sum / SC<double>(ax.outer * ax.inner)));
     }
   } // namespace Detail
 } // namespace NN::Loss

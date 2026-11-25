@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <ranges>
+#include <utility>
 #include <vector>
 
 namespace NN {
@@ -15,6 +17,12 @@ namespace NN {
 #else
   using dtype = float;
 #endif
+
+  // sized types
+  using i32 = std::int32_t;
+  using u32 = std::uint32_t;
+  using i64 = std::int64_t;
+  using u64 = std::uint64_t;
 
   // forward decl
   namespace Autograd {
@@ -41,4 +49,11 @@ namespace NN {
     // Node that produced this tensor, or null for a leaf.
     std::shared_ptr<Autograd::GradFn> grad_fn;
   };
+
+  // Casting helper
+  template <typename To, typename From>
+    requires requires(From &&f) { static_cast<To>(f); }
+  constexpr To SC(From &&x) {
+    return static_cast<To>(std::forward<From>(x));
+  }
 } // namespace NN

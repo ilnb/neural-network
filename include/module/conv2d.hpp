@@ -14,7 +14,7 @@ namespace NN {
       size_t padding = 0;
       size_t dilation = 1;
       bool bias = true;
-      uint32_t seed = std::random_device{}();
+      u32 seed = std::random_device{}();
     };
 
     Tensor w, b;
@@ -34,7 +34,7 @@ namespace NN {
       if (cfg.bias)
         b.set_dims(out);
 
-      std::normal_distribution dist(dtype(0), static_cast<dtype>(2) / static_cast<dtype>(in * kernel_h * kernel_w));
+      std::normal_distribution dist(SC<dtype>(0), SC<dtype>(2) / SC<dtype>(in * kernel_h * kernel_w));
       std::ranges::generate(w.p->data, [&]() { return dist(rng); });
 
       w.set_requires_grad(true);

@@ -32,8 +32,8 @@ namespace NN {
     std::mt19937 rng;
 
     // `seed` seeds the mask RNG; the default is nondeterministic.
-    Dropout(const dtype p, const uint32_t seed = std::random_device{}()) : p(p), rng(seed) {
-      if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
+    Dropout(const dtype p, const u32 seed = std::random_device{}()) : p(p), rng(seed) {
+      if (!std::isfinite(p) || p < SC<dtype>(0) || p >= SC<dtype>(1))
         throw std::invalid_argument(std::format("Dropout: probability {} must be in [0, 1)).", p));
     }
 
@@ -45,12 +45,12 @@ namespace NN {
       mask.resize(x.p->num_el);
       std::bernoulli_distribution dist(p);
 
-      const dtype scale = dtype(1) / (dtype(1) - p);
+      const dtype scale = SC<dtype>(1) / (SC<dtype>(1) - p);
       auto &rd = r.p->data, &xd = x.p->data;
       for (size_t i = 0, n = x.p->num_el; i < n; i++) {
         const bool kept = !dist(rng);
         mask[i] = kept;
-        rd[i] = kept ? xd[i] * scale : dtype(0);
+        rd[i] = kept ? xd[i] * scale : SC<dtype>(0);
       }
 
       if (x.p->requires_grad) {

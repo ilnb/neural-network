@@ -153,7 +153,7 @@ namespace NN {
     template <typename... Args>
       requires(sizeof...(Args) > 1) and (std::integral<Args> and ...)
     explicit Tensor(Args... args) : p(std::make_shared<Impl>()) {
-      p->shape = std::vector{ static_cast<size_t>(args)... };
+      p->shape = std::vector{ SC<size_t>(args)... };
       const size_t n = Detail::checked_num_el(p->shape);
       finalize_shape(n, false);
     }
@@ -178,7 +178,7 @@ namespace NN {
     template <typename... Args>
       requires(std::convertible_to<Args, dtype> and ...)
     Tensor &set_data(Args... args) {
-      return set_data(std::array<dtype, sizeof...(Args)>{ static_cast<dtype>(args)... });
+      return set_data(std::array<dtype, sizeof...(Args)>{ SC<dtype>(args)... });
     }
 
     // Takes data as an initializer_list
@@ -211,7 +211,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     Tensor &set_dims(Args... args) {
-      return set_dims(std::vector<size_t>{ static_cast<size_t>(args)... });
+      return set_dims(std::vector<size_t>{ SC<size_t>(args)... });
     }
 
     // Same as the range overload, taking a shape vector.
@@ -238,7 +238,7 @@ namespace NN {
       auto it = std::ranges::begin(r); // supports more types
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++) {
-        if (it[i] < 0 or static_cast<size_t>(it[i]) >= self.p->shape[i])
+        if (it[i] < 0 or SC<size_t>(it[i]) >= self.p->shape[i])
           throw std::out_of_range(std::format("at: idx {} is out of bounds {}.", it[i], self.p->shape[i]));
         offset += it[i] * self.p->strides[i];
       }
@@ -259,7 +259,7 @@ namespace NN {
     template <typename Self, typename... Args>
       requires(std::integral<Args> and ...)
     decltype(auto) at(this Self &&self, Args... args) {
-      return self.at(std::array<size_t, sizeof...(Args)>{ static_cast<size_t>(args)... });
+      return self.at(std::array<size_t, sizeof...(Args)>{ SC<size_t>(args)... });
     }
 
     // Element access without bounds checking.
@@ -273,7 +273,7 @@ namespace NN {
         throw std::invalid_argument("operator[]: empty tensor.");
       if (sizeof...(args) != self.p->shape.size())
         throw std::invalid_argument("operator[]: Number of indices doesnt match tensor rank.");
-      std::array<size_t, sizeof...(Args)> tmp{ static_cast<size_t>(args)... };
+      std::array<size_t, sizeof...(Args)> tmp{ SC<size_t>(args)... };
       size_t offset = 0;
       for (size_t i = 0; i < self.p->shape.size(); i++)
         offset += tmp[i] * self.p->strides[i];
@@ -299,7 +299,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     [[nodiscard]] Tensor reshape(Args... args) const {
-      return reshape(std::vector{ static_cast<size_t>(args)... });
+      return reshape(std::vector{ SC<size_t>(args)... });
     }
 
     [[nodiscard]] Tensor reshape(std::vector<size_t> &&v) const;
@@ -345,7 +345,7 @@ namespace NN {
     template <typename... Args>
       requires(std::integral<Args> and ...)
     [[nodiscard]] Tensor permute(Args... args) const {
-      return permute(std::vector{ static_cast<size_t>(args)... });
+      return permute(std::vector{ SC<size_t>(args)... });
     }
 
     [[nodiscard]] Tensor permute(std::vector<size_t> &&v) const;

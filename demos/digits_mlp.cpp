@@ -51,7 +51,7 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
     auto pred = model(xb);
     const size_t C = pred.p->shape.back();
 
-    m.loss += static_cast<double>(Loss::ce(pred, yb).item()) * static_cast<double>(n);
+    m.loss += SC<double>(Loss::ce(pred, yb).item()) * SC<double>(n);
     for (size_t r = 0; r < n; r++) {
       size_t best = 0, truth = 0;
       for (size_t c = 1; c < C; c++) {
@@ -60,13 +60,13 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
         if (yb.p->data[r * C + c] > yb.p->data[r * C + truth])
           truth = c;
       }
-      m.acc += static_cast<double>(best == truth);
+      m.acc += SC<double>(best == truth);
     }
     seen += n;
   }
 
-  m.loss /= static_cast<double>(seen);
-  m.acc /= static_cast<double>(seen);
+  m.loss /= SC<double>(seen);
+  m.acc /= SC<double>(seen);
   return m;
 }
 
@@ -103,7 +103,7 @@ int main() {
 
     std::vector<dtype> onehot(lines * 10);
     for (size_t i = 0; i < lines; i++)
-      onehot[i * 10 + static_cast<size_t>(labels[i])] = 1;
+      onehot[i * 10 + SC<size_t>(labels[i])] = 1;
 
     X.set_dims(lines, 64).set_data(std::move(feats));
     Y.set_dims(lines, 10).set_data(std::move(onehot));

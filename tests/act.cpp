@@ -8,6 +8,7 @@
 #include <vector>
 
 namespace Act = NN::Act;
+using NN::SC;
 
 static void check_data(const Tensor &t, std::initializer_list<dtype> want, const char *what) {
   const std::vector<dtype> w(want);
@@ -113,7 +114,7 @@ static void test_softmax_axes() {
   Tensor x;
   x.set_dims({ 2, 3, 4 }, false);
   for (size_t i = 0; i < x.p->num_el; i++)
-    x.p->data[i] = static_cast<dtype>(i) / 4 - 3;
+    x.p->data[i] = SC<dtype>(i) / 4 - 3;
 
   for (size_t dim = 0; dim < 3; dim++) {
     const auto r = Act::softmax(x, dim);
@@ -179,7 +180,7 @@ static void test_log_softmax_axes() {
   Tensor x;
   x.set_dims({ 2, 3, 4 }, false);
   for (size_t i = 0; i < x.p->num_el; i++)
-    x.p->data[i] = static_cast<dtype>(i) / 4 - 3;
+    x.p->data[i] = SC<dtype>(i) / 4 - 3;
 
   for (size_t dim = 0; dim < 3; dim++) {
     const auto r = Act::log_softmax(x, dim);

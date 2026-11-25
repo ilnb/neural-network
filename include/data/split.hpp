@@ -11,7 +11,7 @@ namespace NN::Data {
     // Fraction of the dataset assigned to the test subset, in `(0, 1)`.
     double test_size = 0.2;
     // Seed of the shuffling RNG. Ignored when `shuf` is false.
-    uint32_t seed = std::random_device{}();
+    u32 seed = std::random_device{}();
     // Shuffle the indices before splitting. When false, the first
     // `test_size * size()` indices go to the test subset.
     bool shuf = true;

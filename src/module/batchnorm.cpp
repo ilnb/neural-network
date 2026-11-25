@@ -37,7 +37,7 @@ namespace NN {
       for (size_t i = 0; i < xn; i++)
         mu[(i / inner) % C] += xd[i];
       for (size_t c = 0; c < C; c++)
-        mu[c] /= static_cast<dtype>(n);
+        mu[c] /= SC<dtype>(n);
 
       for (size_t i = 0; i < xn; i++) {
         const size_t c = (i / inner) % C;
@@ -45,7 +45,7 @@ namespace NN {
         var[c] += d * d;
       }
       for (size_t c = 0; c < C; c++)
-        var[c] /= static_cast<dtype>(n);
+        var[c] /= SC<dtype>(n);
     } else {
       std::ranges::copy(running_mean.p->data, mu.begin());
       std::ranges::copy(running_var.p->data, var.begin());
@@ -57,7 +57,7 @@ namespace NN {
     // The running buffers are not part of the graph, so they are updated
     // through their raw storage.
     if (training) {
-      const dtype corr = n > 1 ? static_cast<dtype>(n) / static_cast<dtype>(n - 1) : dtype(1);
+      const dtype corr = n > 1 ? SC<dtype>(n) / SC<dtype>(n - 1) : dtype(1);
       for (size_t c = 0; c < C; c++) {
         running_mean.p->data[c] = (1 - cfg.mom) * running_mean.p->data[c] + cfg.mom * mu[c];
         running_var.p->data[c] = (1 - cfg.mom) * running_var.p->data[c] + cfg.mom * var[c] * corr;
@@ -99,7 +99,7 @@ namespace NN {
           for (size_t i = 0; i < an; i++) {
             const size_t c = (i / inner) % C;
             if (batch_stats)
-              xd[i] = gd[c] * invstd[c] * (zd[i] - dbeta[c] / static_cast<dtype>(n) - xhat[i] * dgamma[c] / static_cast<dtype>(n));
+              xd[i] = gd[c] * invstd[c] * (zd[i] - dbeta[c] / SC<dtype>(n) - xhat[i] * dgamma[c] / SC<dtype>(n));
             else
               xd[i] = gd[c] * invstd[c] * zd[i];
           }

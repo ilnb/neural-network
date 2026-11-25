@@ -17,11 +17,11 @@ static dtype naive(const dtype *xs, const dtype *ws, const dtype *bs, size_t C, 
   for (size_t ic = 0; ic < C; ic++)
     for (size_t kh = 0; kh < KH; kh++)
       for (size_t kw = 0; kw < KW; kw++) {
-        auto ih = static_cast<ptrdiff_t>(oh * S + kh * D) - static_cast<ptrdiff_t>(P);
-        auto iw = static_cast<ptrdiff_t>(ow * S + kw * D) - static_cast<ptrdiff_t>(P);
-        if (ih < 0 or iw < 0 or ih >= static_cast<ptrdiff_t>(H) or iw >= static_cast<ptrdiff_t>(W))
+        auto ih = SC<ptrdiff_t>(oh * S + kh * D) - SC<ptrdiff_t>(P);
+        auto iw = SC<ptrdiff_t>(ow * S + kw * D) - SC<ptrdiff_t>(P);
+        if (ih < 0 or iw < 0 or ih >= SC<ptrdiff_t>(H) or iw >= SC<ptrdiff_t>(W))
           continue;
-        sum += xs[(ic * H + static_cast<size_t>(ih)) * W + static_cast<size_t>(iw)] * ws[((oc * C + ic) * KH + kh) * KW + kw];
+        sum += xs[(ic * H + SC<size_t>(ih)) * W + SC<size_t>(iw)] * ws[((oc * C + ic) * KH + kh) * KW + kw];
       }
   return sum;
 }

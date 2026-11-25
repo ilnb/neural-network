@@ -20,7 +20,7 @@ namespace NN::Data {
     if (cfg.test_size <= 0 or 1 <= cfg.test_size)
       throw std::invalid_argument(std::format("train_test_split: test_size {} should be in (0, 1).", cfg.test_size));
 
-    const size_t n_test = std::clamp<size_t>(static_cast<size_t>(std::llround(N * cfg.test_size)), 1, N - 1);
+    const size_t n_test = std::clamp<size_t>(SC<size_t>(std::llround(N * cfg.test_size)), 1, N - 1);
 
     auto idx = std::views::iota(0zu, N) | std::ranges::to<std::vector>();
     if (cfg.shuf) {
