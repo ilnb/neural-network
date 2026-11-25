@@ -15,9 +15,11 @@
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
 #include "optim/adam.hpp"
+#include "serial/checkpoint.hpp"
 
 #include <algorithm>
 #include <charconv>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <numeric>
@@ -162,5 +164,15 @@ int main() {
 
   auto [loss, acc] = evaluate(model, *test_set, 256);
   std::println("Test loss: {:.4e}, acc = {:.2f}%", loss, acc * 100);
+
+  std::error_code ec;
+  std::filesystem::create_directory("saves", ec);
+
+  if (ec) {
+    std::println(stderr, "Failed to create directory: {}", ec.message());
+    std::exit(1);
+  }
+  Serial::save(model, "saves/mnist_cnn.nnst");
+  return 0;
   return 0;
 }

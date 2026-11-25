@@ -9,8 +9,12 @@
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
 #include "optim/adam.hpp"
+#include "serial/checkpoint.hpp"
 
+#include <cstdlib>
+#include <filesystem>
 #include <print>
+#include <system_error>
 
 using namespace NN;
 
@@ -54,10 +58,14 @@ int main() {
   }
 
   model.eval();
-  Tensor test(1, 2);
-  for (const auto &l : std::vector<std::vector<int>>{ { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 } }) {
-    test.set_data(l);
-    auto out = model(test);
-    std::println("prediction for {}: {}", test.p->data, out.p->data);
+
+  std::error_code ec;
+  std::filesystem::create_directory("saves", ec);
+
+  if (ec) {
+    std::println(stderr, "Failed to create directory: {}", ec.message());
+    std::exit(1);
   }
+  Serial::save(model, "saves/xor.nnst");
+  return 0;
 }
