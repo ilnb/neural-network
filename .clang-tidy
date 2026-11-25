@@ -73,6 +73,7 @@ Checks: >
   misc-throw-by-value-catch-by-reference,
   misc-unused-parameters,
   modernize-*,
+  -modernize-avoid-c-style-cast,
   -modernize-use-emplace,
   -modernize-redundant-void-arg,
   -modernize-use-starts-ends-with,
