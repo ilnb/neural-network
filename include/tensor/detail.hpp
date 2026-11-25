@@ -18,31 +18,31 @@ namespace NN::Detail {
   // Returns a new tensor with every element negated.
   //
   // Throws `std::invalid_argument` if `t` is empty.
-  Tensor neg(const Tensor &t);
+  [[nodiscard]] Tensor neg(const Tensor &t);
 
-  Tensor sqrt(const Tensor &t);
+  [[nodiscard]] Tensor sqrt(const Tensor &t);
 
-  Tensor sum(const Tensor &t);
+  [[nodiscard]] Tensor sum(const Tensor &t);
 
-  Tensor sum(const Tensor &t, size_t dim);
+  [[nodiscard]] Tensor sum(const Tensor &t, size_t dim);
 
-  Tensor expand(const Tensor &t, size_t dim, size_t size);
+  [[nodiscard]] Tensor expand(const Tensor &t, size_t dim, size_t size);
 
-  Tensor reshape(const Tensor &t, std::vector<size_t> &&v);
+  [[nodiscard]] Tensor reshape(const Tensor &t, std::vector<size_t> &&v);
 
-  Tensor permute(const Tensor &t, const std::vector<size_t> &v);
+  [[nodiscard]] Tensor permute(const Tensor &t, const std::vector<size_t> &v);
 
-  Tensor transpose(const Tensor &t);
+  [[nodiscard]] Tensor transpose(const Tensor &t);
 
-  Tensor cat(const Tensor &t, const Tensor &b, size_t dim);
+  [[nodiscard]] Tensor cat(const Tensor &t, const Tensor &b, size_t dim);
 
-  Tensor stack(const Tensor &t, const Tensor &b, size_t dim);
+  [[nodiscard]] Tensor stack(const Tensor &t, const Tensor &b, size_t dim);
 
-  Tensor add(const Tensor &t, const dtype x);
+  [[nodiscard]] Tensor add(const Tensor &t, const dtype x);
 
-  Tensor mul(const Tensor &t, const dtype x);
+  [[nodiscard]] Tensor mul(const Tensor &t, const dtype x);
 
-  Tensor matmul(const Tensor &t, const Tensor &b);
+  [[nodiscard]] Tensor matmul(const Tensor &t, const Tensor &b);
 
   // Writes the product of a shared `a` with a batch of `b` into `dst`, without
   // allocating it. This is the fast path behind `matmul()`, exposed for callers
@@ -61,7 +61,7 @@ namespace NN::Detail {
   // Returns a new tensor of `op(a, b)` with full broadcasting.
   template <typename Op>
     requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
-  Tensor binary_broadcast(const Tensor &a, const Tensor &b, Op op) {
+  [[nodiscard]] Tensor binary_broadcast(const Tensor &a, const Tensor &b, Op op) {
     auto out = Detail::broadcast_shape(a.p->shape, b.p->shape);
     const auto out_sz = out.size();
 
@@ -100,7 +100,7 @@ namespace NN::Detail {
   // `dim >= rank`.
   template <typename Op>
     requires std::invocable<Op, dtype, dtype> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
-  Tensor reduce(const Tensor &t, size_t dim, dtype init, Op op) {
+  [[nodiscard]] Tensor reduce(const Tensor &t, size_t dim, dtype init, Op op) {
     if (t.empty())
       throw std::domain_error("reduce: empty tensor.");
     auto &p = t.p;
@@ -151,7 +151,7 @@ namespace NN::Detail {
   // empty, and `std::out_of_range` if `dim >= rank`.
   template <typename Op>
     requires std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, bool> and std::convertible_to<std::invoke_result_t<Op, dtype, dtype>, dtype>
-  std::pair<Tensor, std::vector<size_t>> cmp(const Tensor &t, size_t dim, Op op) {
+  [[nodiscard]] std::pair<Tensor, std::vector<size_t>> cmp(const Tensor &t, size_t dim, Op op) {
     if (t.empty())
       throw std::domain_error("cmp: empty tensor.");
     auto &p = t.p;
@@ -209,7 +209,7 @@ namespace NN::Detail {
     requires requires(Op op, dtype x) {
       { op(x, x) } -> std::convertible_to<dtype>;
     }
-  Tensor &binary_inplace(Tensor &a, const Tensor &b, Op op) {
+  [[nodiscard]] Tensor &binary_inplace(Tensor &a, const Tensor &b, Op op) {
     std::vector<size_t> scratch;
     std::span<const size_t> bs = b.p->strides;
     if (b.p->shape != a.p->shape) {
@@ -239,7 +239,7 @@ namespace NN::Detail {
     requires requires(Op op, dtype x) {
       { op(x, x) } -> std::convertible_to<dtype>;
     }
-  Tensor binary_scalar(const Tensor &t, const dtype x, Op op) {
+  [[nodiscard]] Tensor binary_scalar(const Tensor &t, const dtype x, Op op) {
     auto r = t.clone();
     std::ranges::for_each(r.p->data, [&](dtype &v) { v = op(v, x); });
     return r;
@@ -252,7 +252,7 @@ namespace NN::Detail {
     requires requires(Op op, dtype x) {
       { op(x, x) } -> std::convertible_to<dtype>;
     }
-  Tensor &binary_inplace(Tensor &t, const dtype x, Op op) {
+  [[nodiscard]] Tensor &binary_inplace(Tensor &t, const dtype x, Op op) {
     std::ranges::for_each(t.p->data, [&](dtype &v) { v = op(v, x); });
     return t;
   }

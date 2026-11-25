@@ -1,3 +1,8 @@
+// MNIST through three convolutions: the demo the library is benchmarked on.
+//
+// `assets/mnist_784.csv` holds 784 pixel columns plus a label; each row is
+// viewed as a single 1x28x28 image. The pixels are stored as raw 0..255
+// integers and are are divided by 255 on load.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -9,11 +14,12 @@
 #include "module/maxpool2d.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
+#include "serial/checkpoint.hpp"
 
 #include <algorithm>
 #include <charconv>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <numeric>
@@ -50,7 +56,7 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
     auto pred = model(xb);
     const size_t C = pred.p->shape.back();
 
-    m.loss += static_cast<double>(Loss::ce(pred, yb).item()) * static_cast<double>(n);
+    m.loss += SC<double>(Loss::ce(pred, yb).item()) * SC<double>(n);
     for (size_t r = 0; r < n; r++) {
       size_t best = 0, truth = 0;
       for (size_t c = 1; c < C; c++) {
@@ -59,13 +65,13 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
         if (yb.p->data[r * C + c] > yb.p->data[r * C + truth])
           truth = c;
       }
-      m.acc += static_cast<double>(best == truth);
+      m.acc += SC<double>(best == truth);
     }
     seen += n;
   }
 
-  m.loss /= static_cast<double>(seen);
-  m.acc /= static_cast<double>(seen);
+  m.loss /= SC<double>(seen);
+  m.acc /= SC<double>(seen);
   return m;
 }
 
@@ -75,7 +81,7 @@ int main() {
     const size_t w = 28, h = 28;
     std::ifstream f("assets/mnist_784.csv");
     if (!f) {
-      std::println(stderr, "Not able to open digits.csv");
+      std::println(stderr, "Not able to open mnist_784.csv");
       exit(1);
     }
     std::vector<dtype> feats, labels;
@@ -91,7 +97,7 @@ int main() {
         if (err_c != std::errc())
           throw std::runtime_error("bad number on line " + std::to_string(lines + 1));
         if (col < w * h)
-          feats.push_back(v / 16);
+          feats.push_back(v / 255);
         else if (col == w * h)
           labels.push_back(v);
         col++;
@@ -103,12 +109,15 @@ int main() {
 
     std::vector<dtype> onehot(lines * 10);
     for (size_t i = 0; i < lines; i++)
-      onehot[i * 10 + static_cast<size_t>(labels[i])] = 1;
+      onehot[i * 10 + SC<size_t>(labels[i])] = 1;
 
     X.set_dims(lines, 1, w, h).set_data(std::move(feats));
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // Padding 1 keeps the extent and each 2x2 pool halves it (floored), so
+  // 28 -> 14 -> 7 -> 3 and the classifier sees 64 channels of 3x3. The
+  // classifier returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Conv2d(1, 32, 3, { .padding = 1, .seed = 0 }),
@@ -124,8 +133,7 @@ int main() {
     MaxPool2d(2),
     ReLU(),
     Flatten(),
-    Linear(64 * 3 * 3, 10, 0),
-    Softmax(1)
+    Linear(64 * 3 * 3, 10, 0)
       // clang-format on
   );
 
@@ -156,5 +164,15 @@ int main() {
 
   auto [loss, acc] = evaluate(model, *test_set, 256);
   std::println("Test loss: {:.4e}, acc = {:.2f}%", loss, acc * 100);
+
+  std::error_code ec;
+  std::filesystem::create_directory("saves", ec);
+
+  if (ec) {
+    std::println(stderr, "Failed to create directory: {}", ec.message());
+    std::exit(1);
+  }
+  Serial::save(model, "saves/mnist_cnn.nnst");
+  return 0;
   return 0;
 }

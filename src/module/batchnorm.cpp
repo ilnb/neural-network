@@ -8,6 +8,10 @@
 #include <vector>
 
 namespace NN {
+  std::vector<NamedTensor> BatchNorm::named_params() const { return { { "gamma", gamma }, { "beta", beta } }; }
+
+  std::vector<NamedTensor> BatchNorm::named_buffers() const { return { { "running_mean", running_mean }, { "running_var", running_var } }; }
+
   Tensor BatchNorm::forward(const Tensor &x) {
     if (x.empty())
       throw std::invalid_argument("BatchNorm::forward: empty tensor.");
@@ -33,7 +37,7 @@ namespace NN {
       for (size_t i = 0; i < xn; i++)
         mu[(i / inner) % C] += xd[i];
       for (size_t c = 0; c < C; c++)
-        mu[c] /= static_cast<dtype>(n);
+        mu[c] /= SC<dtype>(n);
 
       for (size_t i = 0; i < xn; i++) {
         const size_t c = (i / inner) % C;
@@ -41,7 +45,7 @@ namespace NN {
         var[c] += d * d;
       }
       for (size_t c = 0; c < C; c++)
-        var[c] /= static_cast<dtype>(n);
+        var[c] /= SC<dtype>(n);
     } else {
       std::ranges::copy(running_mean.p->data, mu.begin());
       std::ranges::copy(running_var.p->data, var.begin());
@@ -53,7 +57,7 @@ namespace NN {
     // The running buffers are not part of the graph, so they are updated
     // through their raw storage.
     if (training) {
-      const dtype corr = n > 1 ? static_cast<dtype>(n) / static_cast<dtype>(n - 1) : dtype(1);
+      const dtype corr = n > 1 ? SC<dtype>(n) / SC<dtype>(n - 1) : dtype(1);
       for (size_t c = 0; c < C; c++) {
         running_mean.p->data[c] = (1 - cfg.mom) * running_mean.p->data[c] + cfg.mom * mu[c];
         running_var.p->data[c] = (1 - cfg.mom) * running_var.p->data[c] + cfg.mom * var[c] * corr;
@@ -61,7 +65,6 @@ namespace NN {
     }
 
     Tensor r(shape);
-
     std::vector<dtype> xhat(xn);
     auto &yd = r.p->data;
     auto &gd = gamma.p->data, &bd = beta.p->data;
@@ -96,17 +99,19 @@ namespace NN {
           for (size_t i = 0; i < an; i++) {
             const size_t c = (i / inner) % C;
             if (batch_stats)
-              xd[i] = gd[c] * invstd[c] * (zd[i] - dbeta[c] / static_cast<dtype>(n) - xhat[i] * dgamma[c] / static_cast<dtype>(n));
+              xd[i] = gd[c] * invstd[c] * (zd[i] - dbeta[c] / SC<dtype>(n) - xhat[i] * dgamma[c] / SC<dtype>(n));
             else
               xd[i] = gd[c] * invstd[c] * zd[i];
           }
           accumulate(*ap, dx);
         }
+
         if (ag->requires_grad) {
           Tensor t(ag->shape);
           t.p->data = std::move(dgamma);
           accumulate(*ag, t);
         }
+
         if (ab->requires_grad) {
           Tensor t(ab->shape);
           t.p->data = std::move(dbeta);

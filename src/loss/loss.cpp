@@ -4,6 +4,7 @@
 #include "autograd/grad_mode.hpp"
 #include "tensor/tensor.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <limits>
@@ -13,6 +14,36 @@
 using NN::Autograd::GradFn, NN::Autograd::accumulate;
 
 namespace NN::Loss {
+  namespace {
+    // Layout of the classification axis `dim`: `outer` slices before it,
+    // `len` entries along it, and `inner` slices after it.
+    struct Axis {
+      size_t len, inner, outer;
+    };
+
+    Axis axis_info(const std::vector<size_t> &shape, size_t dim) {
+      Axis a{ shape[dim], 1, 1 };
+      for (size_t i = dim + 1; i < shape.size(); i++)
+        a.inner *= shape[i];
+      for (size_t i = 0; i < dim; i++)
+        a.outer *= shape[i];
+      return a;
+    }
+
+    // `log(sum(exp(x)))` for one slice, subtracting the maximum logit first.
+    double slice_lse(const dtype *x, size_t len, size_t stride) {
+      dtype mx = x[0];
+      for (size_t j = 1; j < len; j++)
+        mx = std::max(mx, x[j * stride]);
+
+      double ex = 0;
+      for (size_t j = 0; j < len; j++)
+        ex += std::exp(SC<double>(x[j * stride]) - SC<double>(mx));
+
+      return SC<double>(mx) + std::log(ex);
+    }
+  } // namespace
+
   Tensor mse(const Tensor &pred, const Tensor &target) {
     auto r = Detail::mse(pred, target);
 
@@ -95,23 +126,48 @@ namespace NN::Loss {
       auto fn = std::make_shared<GradFn>();
       fn->inputs = { pred.p, target.p };
       fn->backward = [ap = pred.p, at = target.p, dim](const Tensor &dz) {
-        const dtype f = -dz.p->data[0] * static_cast<dtype>(ap->shape[dim]) / ap->num_el;
-        const auto &pdata = ap->data;
+        const auto &xdata = ap->data, &tdata = at->data;
+        const auto ax = axis_info(ap->shape, dim);
+        const dtype scale = dz.p->data[0] / SC<dtype>(ax.outer * ax.inner);
 
         if (ap->requires_grad) {
           Tensor dx(ap->shape);
           auto &xd = dx.p->data;
-          auto &td = at->data;
-          for (size_t i = 0, n = ap->num_el; i < n; i++)
-            if (td[i] != 0)
-              xd[i] = f * td[i] / pdata[i];
+
+          for (size_t o = 0; o < ax.outer; o++) {
+            for (size_t q = 0; q < ax.inner; q++) {
+              const size_t base = o * ax.len * ax.inner + q;
+              const double lse = slice_lse(xdata.data() + base, ax.len, ax.inner);
+
+              double tsum = 0;
+              for (size_t j = 0; j < ax.len; j++)
+                tsum += tdata[base + j * ax.inner];
+
+              for (size_t j = 0; j < ax.len; j++) {
+                const size_t i = base + j * ax.inner;
+                const double p = std::exp(SC<double>(xdata[i]) - lse);
+                xd[i] = SC<dtype>(scale * (tsum * p - SC<double>(tdata[i])));
+              }
+            }
+          }
           accumulate(*ap, dx);
         }
+
         if (at->requires_grad) {
           Tensor dt(at->shape);
           auto &td = dt.p->data;
-          for (size_t i = 0, n = at->num_el; i < n; i++)
-            td[i] = f * std::log(pdata[i]);
+
+          for (size_t o = 0; o < ax.outer; o++) {
+            for (size_t q = 0; q < ax.inner; q++) {
+              const size_t base = o * ax.len * ax.inner + q;
+              const double lse = slice_lse(xdata.data() + base, ax.len, ax.inner);
+
+              for (size_t j = 0; j < ax.len; j++) {
+                const size_t i = base + j * ax.inner;
+                td[i] = SC<dtype>(-SC<double>(scale) * (SC<double>(xdata[i]) - lse));
+              }
+            }
+          }
           accumulate(*at, dt);
         }
       };
@@ -132,10 +188,10 @@ namespace NN::Loss {
       auto n = pred.p->num_el;
       auto &pdata = pred.p->data, &tdata = target.p->data;
       for (size_t i = 0; i < n; i++) {
-        const double d = static_cast<double>(pdata[i]) - static_cast<double>(tdata[i]);
+        const auto d = SC<double>(pdata[i]) - SC<double>(tdata[i]);
         sum += d * d;
       }
-      return Tensor(static_cast<dtype>(sum / static_cast<double>(n)));
+      return Tensor(SC<dtype>(sum / SC<double>(n)));
     }
 
     Tensor bce(const Tensor &pred, const Tensor &target) {
@@ -171,7 +227,7 @@ namespace NN::Loss {
         sum -= y * std::log(p);
         sum -= (1 - y) * std::log(1 - p);
       }
-      return Tensor(static_cast<dtype>(sum / static_cast<double>(n)));
+      return Tensor(SC<dtype>(sum / SC<double>(n)));
     }
 
     Tensor ce(const Tensor &pred, const Tensor &target, size_t dim) {
@@ -181,30 +237,37 @@ namespace NN::Loss {
       if (dim >= pred.p->shape.size())
         throw std::out_of_range(std::format("ce: dim is {} out of bounds {}.", dim, pred.p->shape.size()));
 
-      auto n = pred.p->num_el;
-      auto &pdata = pred.p->data, &tdata = target.p->data;
+      auto &xdata = pred.p->data, &tdata = target.p->data;
+      const size_t n = pred.p->num_el;
+      const auto ax = axis_info(pred.p->shape, dim);
 
       for (size_t i = 0; i < n; i++) {
-        const dtype y = tdata[i], p = pdata[i];
+        const dtype y = tdata[i];
         if (y < 0 or 1 < y)
           throw std::invalid_argument("ce: malformed tensor data. targets must lie in [0, 1].");
-        if (p < 0 or 1 < p)
-          throw std::invalid_argument("ce: malformed tensor data. probabilities must lie in [0, 1].");
       }
 
-      const auto slices = static_cast<double>(n) / pred.p->shape[dim];
       double sum = 0;
+      for (size_t o = 0; o < ax.outer; o++) {
+        for (size_t q = 0; q < ax.inner; q++) {
+          const size_t base = o * ax.len * ax.inner + q;
 
-      for (size_t i = 0; i < n; i++) {
-        const dtype y = tdata[i], p = pdata[i];
-        if (y == 0)
-          continue;
-        if (p == 0)
-          return Tensor(std::numeric_limits<dtype>::infinity());
-        sum -= y * std::log(p);
+          double tsum = 0, tx = 0;
+          for (size_t j = 0; j < ax.len; j++) {
+            const size_t i = base + j * ax.inner;
+            const double t = tdata[i];
+            tsum += t;
+            if (t != 0)
+              tx += t * SC<double>(xdata[i]);
+          }
+          if (tsum == 0)
+            continue;
+
+          sum += tsum * slice_lse(xdata.data() + base, ax.len, ax.inner) - tx;
+        }
       }
 
-      return Tensor(static_cast<dtype>(sum / slices));
+      return Tensor(SC<dtype>(sum / SC<double>(ax.outer * ax.inner)));
     }
   } // namespace Detail
 } // namespace NN::Loss

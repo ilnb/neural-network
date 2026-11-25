@@ -1,7 +1,6 @@
 #pragma once
 
 #include "module/base.hpp"
-#include "tensor/tensor.hpp"
 
 #include <initializer_list>
 #include <memory>
@@ -16,15 +15,19 @@ namespace NN {
     Sequential() = default;
 
     template <typename... M>
+      requires((not std::same_as<std::remove_cvref_t<M>, Sequential>) and ...)
     Sequential(M &&...args) {
       (modules.push_back(std::make_unique<std::remove_cvref_t<M>>(std::forward<M>(args))), ...);
     }
 
     template <typename M>
+      requires(not std::same_as<std::remove_cvref_t<M>, Sequential>)
     Sequential(std::initializer_list<M> l) {
       for (auto &&m : l)
         modules.push_back(std::make_unique<std::remove_cvref_t<M>>(m));
     }
+
+    size_t size() const { return modules.size(); }
 
     Module &at(size_t i) { return *modules.at(i); }
 
@@ -36,27 +39,12 @@ namespace NN {
 
     Tensor operator()(const Tensor &x) { return forward(x); }
 
-    Tensor forward(const Tensor &x) override {
-      Tensor r = x;
-      for (const auto &m : modules)
-        r = m->forward(r);
-      return r;
-    }
+    [[nodiscard]] Tensor forward(const Tensor &x) override;
 
-    std::vector<Tensor> params() const override {
-      std::vector<Tensor> ret;
-      for (const auto &m : modules) {
-        auto p = m->params();
-        ret.append_range(p);
-      }
-      return ret;
-    }
+    std::vector<NamedTensor> named_params() const override;
 
-    void train(bool mode = true) override {
-      Module::train(mode);
+    std::vector<NamedTensor> named_buffers() const override;
 
-      for (auto &m : modules)
-        m->train(mode);
-    }
+    void train(bool mode = true) override;
   };
 } // namespace NN

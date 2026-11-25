@@ -31,13 +31,13 @@ namespace NN::Conv::Detail {
 
     // number of top-left positions the window can take along H, i.e. the
     // padded extent minus the kernel extent. H_out = floor((hs - 1) / S) + 1.
-    const auto hs = static_cast<ptrdiff_t>(g.H) + 2 * P - D * (static_cast<ptrdiff_t>(kh) - 1);
-    const auto ws = static_cast<ptrdiff_t>(g.W) + 2 * P - D * (static_cast<ptrdiff_t>(kw) - 1);
+    const auto hs = SC<ptrdiff_t>(g.H) + 2 * P - D * (SC<ptrdiff_t>(kh) - 1);
+    const auto ws = SC<ptrdiff_t>(g.W) + 2 * P - D * (SC<ptrdiff_t>(kw) - 1);
     if (hs < 1 or ws < 1)
       throw std::invalid_argument(std::format("Geometry::make: kernel {}x{} (dilation {}) does not fit input {}x{} with padding {}.", kh, kw, dilation, g.H, g.W, padding));
 
-    g.H_out = static_cast<size_t>((hs - 1) / S + 1);
-    g.W_out = static_cast<size_t>((ws - 1) / S + 1);
+    g.H_out = SC<size_t>((hs - 1) / S + 1);
+    g.W_out = SC<size_t>((ws - 1) / S + 1);
     return g;
   }
 
@@ -64,20 +64,20 @@ namespace NN::Conv::Detail {
             dtype *plane = dst + ((n * K + (c * kh + i) * kw + j) * HW);
 
             // Height offset is constant per i, so hoist it out of the oh walk.
-            const auto dh = static_cast<ptrdiff_t>(i * D) - static_cast<ptrdiff_t>(P);
+            const auto dh = SC<ptrdiff_t>(i * D) - SC<ptrdiff_t>(P);
 
             for (size_t oh = 0; oh < H_out; oh++) {
               dtype *drow = plane + oh * W_out;
-              const auto ih = static_cast<ptrdiff_t>(oh * S) + dh;
-              if (ih < 0 or ih >= static_cast<ptrdiff_t>(H)) {
+              const auto ih = SC<ptrdiff_t>(oh * S) + dh;
+              if (ih < 0 or ih >= SC<ptrdiff_t>(H)) {
                 std::fill_n(drow, W_out, dtype(0));
                 continue;
               }
 
-              const dtype *srow = src + ((n * C + c) * H + static_cast<size_t>(ih)) * W;
+              const dtype *srow = src + ((n * C + c) * H + SC<size_t>(ih)) * W;
               for (size_t ow = 0; ow < W_out; ow++) {
-                const auto iw = static_cast<ptrdiff_t>(ow * S + j * D) - static_cast<ptrdiff_t>(P);
-                drow[ow] = (iw < 0 or iw >= static_cast<ptrdiff_t>(W)) ? dtype(0) : srow[iw];
+                const auto iw = SC<ptrdiff_t>(ow * S + j * D) - SC<ptrdiff_t>(P);
+                drow[ow] = (iw < 0 or iw >= SC<ptrdiff_t>(W)) ? dtype(0) : srow[iw];
               }
             }
           }
@@ -106,18 +106,18 @@ namespace NN::Conv::Detail {
         for (size_t i = 0; i < kh; i++) {
           for (size_t j = 0; j < kw; j++) {
             const dtype *plane = src + ((n * K + (c * kh + i) * kw + j) * HW);
-            const auto dh = static_cast<ptrdiff_t>(i * D) - static_cast<ptrdiff_t>(P);
+            const auto dh = SC<ptrdiff_t>(i * D) - SC<ptrdiff_t>(P);
 
             for (size_t oh = 0; oh < H_out; oh++) {
               const dtype *srow = plane + oh * W_out;
-              const auto ih = static_cast<ptrdiff_t>(oh * S) + dh;
-              if (ih < 0 or ih >= static_cast<ptrdiff_t>(H))
+              const auto ih = SC<ptrdiff_t>(oh * S) + dh;
+              if (ih < 0 or ih >= SC<ptrdiff_t>(H))
                 continue;
 
-              dtype *drow = dst + ((n * C + c) * H + static_cast<size_t>(ih)) * W;
+              dtype *drow = dst + ((n * C + c) * H + SC<size_t>(ih)) * W;
               for (size_t ow = 0; ow < W_out; ow++) {
-                const auto iw = static_cast<ptrdiff_t>(ow * S + j * D) - static_cast<ptrdiff_t>(P);
-                if (iw >= 0 and iw < static_cast<ptrdiff_t>(W))
+                const auto iw = SC<ptrdiff_t>(ow * S + j * D) - SC<ptrdiff_t>(P);
+                if (iw >= 0 and iw < SC<ptrdiff_t>(W))
                   drow[iw] += srow[ow];
               }
             }
@@ -181,13 +181,13 @@ namespace NN::Conv::Detail {
     constexpr size_t KB = 32;
     const size_t kblocks = (K + KB - 1) / KB;
 
-    const int workers = static_cast<int>(std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(omp_get_max_threads()), N)));
+    const int workers = SC<int>(std::max<size_t>(1, std::min<size_t>(SC<size_t>(omp_get_max_threads()), N)));
     const size_t wsize = out * K;
-    std::vector<dtype> partial(static_cast<size_t>(workers) * wsize, dtype(0));
+    std::vector<dtype> partial(SC<size_t>(workers) * wsize, dtype(0));
 
 #pragma omp parallel num_threads(workers)
     {
-      const auto worker = static_cast<size_t>(omp_get_thread_num());
+      const auto worker = SC<size_t>(omp_get_thread_num());
       dtype *dwl = partial.data() + worker * wsize;
       std::vector<dtype> tile(out * KB);
 
@@ -224,7 +224,7 @@ namespace NN::Conv::Detail {
     // Reduction of the per-worker partials, in worker order so a fixed thread
     // count always produces the same bits.
     for (int t = 0; t < workers; t++) {
-      const dtype *dwl = partial.data() + static_cast<size_t>(t) * wsize;
+      const dtype *dwl = partial.data() + SC<size_t>(t) * wsize;
       for (size_t i = 0; i < wsize; i++)
         dw[i] += dwl[i];
     }

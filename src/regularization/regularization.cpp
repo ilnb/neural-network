@@ -74,7 +74,7 @@ namespace NN::Reg {
         const auto &w = ap->data;
         for (size_t i = 0, n = ap->num_el; i < n; i++) {
           const dtype sign = (w[i] > 0) - (w[i] < 0);
-          xd[i] = zd[0] * (alpha * sign + (dtype(1) - alpha) * w[i]);
+          xd[i] = zd[0] * (alpha * sign + (SC<dtype>(1) - alpha) * w[i]);
         }
         accumulate(*ap, dx);
       };
@@ -89,13 +89,13 @@ namespace NN::Reg {
     Tensor l1(const Tensor &weight) {
       if (weight.empty())
         throw std::invalid_argument("l1: empty tensor.");
-      return Tensor(std::ranges::fold_left(weight.p->data, dtype(0), [](dtype x, dtype w) { return x + std::abs(w); }));
+      return Tensor(std::ranges::fold_left(weight.p->data, SC<dtype>(0), [](dtype x, dtype w) { return x + std::abs(w); }));
     }
 
     Tensor l2(const Tensor &weight) {
       if (weight.empty())
         throw std::invalid_argument("l2: empty tensor.");
-      return Tensor(dtype(0.5) * std::ranges::fold_left(weight.p->data, dtype(0), [](dtype x, dtype w) { return x + w * w; }));
+      return Tensor(SC<dtype>(0.5) * std::ranges::fold_left(weight.p->data, SC<dtype>(0), [](dtype x, dtype w) { return x + w * w; }));
     }
 
     Tensor elastic_net(const Tensor &weight, const dtype alpha) {
@@ -103,7 +103,8 @@ namespace NN::Reg {
         throw std::invalid_argument("elastic_net: empty tensor.");
       if (alpha < 0 or 1 < alpha)
         throw std::invalid_argument(std::format("elastic_net: alpha {} should be in [0, 1].", alpha));
-      return Tensor(std::ranges::fold_left(weight.p->data, dtype(0), [alpha](dtype x, dtype w) { return x + alpha * std::abs(w) + (dtype(1) - alpha) * dtype(0.5) * w * w; }));
+      return Tensor(std::ranges::fold_left(weight.p->data, SC<dtype>(0),
+                                           [alpha](dtype x, dtype w) { return x + alpha * std::abs(w) + (SC<dtype>(1) - alpha) * SC<dtype>(0.5) * w * w; }));
     }
   } // namespace Detail
 } // namespace NN::Reg

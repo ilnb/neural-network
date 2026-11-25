@@ -1,3 +1,8 @@
+// Handwritten digits (8x8 grey levels) through a small MLP.
+//
+// `assets/digits.csv` holds 64 pixel columns followed by the label. Pixels are
+// 0..16 in the file and are divided by 16 on load, and each label is expanded
+// to a one-hot row because the loss classifies over the 10 classes.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -6,7 +11,6 @@
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
 
 #include <algorithm>
@@ -47,7 +51,7 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
     auto pred = model(xb);
     const size_t C = pred.p->shape.back();
 
-    m.loss += static_cast<double>(Loss::ce(pred, yb).item()) * static_cast<double>(n);
+    m.loss += SC<double>(Loss::ce(pred, yb).item()) * SC<double>(n);
     for (size_t r = 0; r < n; r++) {
       size_t best = 0, truth = 0;
       for (size_t c = 1; c < C; c++) {
@@ -56,13 +60,13 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
         if (yb.p->data[r * C + c] > yb.p->data[r * C + truth])
           truth = c;
       }
-      m.acc += static_cast<double>(best == truth);
+      m.acc += SC<double>(best == truth);
     }
     seen += n;
   }
 
-  m.loss /= static_cast<double>(seen);
-  m.acc /= static_cast<double>(seen);
+  m.loss /= SC<double>(seen);
+  m.acc /= SC<double>(seen);
   return m;
 }
 
@@ -99,12 +103,13 @@ int main() {
 
     std::vector<dtype> onehot(lines * 10);
     for (size_t i = 0; i < lines; i++)
-      onehot[i * 10 + static_cast<size_t>(labels[i])] = 1;
+      onehot[i * 10 + SC<size_t>(labels[i])] = 1;
 
     X.set_dims(lines, 64).set_data(std::move(feats));
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // The classifier returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Linear(64, 16, 0),
@@ -113,8 +118,7 @@ int main() {
     Linear(16, 16, 0),
     BatchNorm1d(16),
     ReLU(),
-    Linear(16, 10, 0),
-    Softmax(1)
+    Linear(16, 10, 0)
       // clang-format on
   );
 

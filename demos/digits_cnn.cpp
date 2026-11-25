@@ -1,3 +1,7 @@
+// Handwritten digits (8x8 grey levels) through two convolutions.
+//
+// Same data and setup as digits_mlp, but the 64 pixels are viewed as a single
+// 1x8x8 image so the conv layers get a spatial layout instead of a flat vector.
 #include "autograd/grad_mode.hpp"
 #include "data/dataloader.hpp"
 #include "data/split.hpp"
@@ -8,7 +12,6 @@
 #include "module/linear.hpp"
 #include "module/relu.hpp"
 #include "module/sequential.hpp"
-#include "module/softmax.hpp"
 #include "optim/adam.hpp"
 
 #include <algorithm>
@@ -49,7 +52,7 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
     auto pred = model(xb);
     const size_t C = pred.p->shape.back();
 
-    m.loss += static_cast<double>(Loss::ce(pred, yb).item()) * static_cast<double>(n);
+    m.loss += SC<double>(Loss::ce(pred, yb).item()) * SC<double>(n);
     for (size_t r = 0; r < n; r++) {
       size_t best = 0, truth = 0;
       for (size_t c = 1; c < C; c++) {
@@ -58,13 +61,13 @@ Metrics evaluate(Sequential &model, const Data::Dataset &ds, const size_t batch_
         if (yb.p->data[r * C + c] > yb.p->data[r * C + truth])
           truth = c;
       }
-      m.acc += static_cast<double>(best == truth);
+      m.acc += SC<double>(best == truth);
     }
     seen += n;
   }
 
-  m.loss /= static_cast<double>(seen);
-  m.acc /= static_cast<double>(seen);
+  m.loss /= SC<double>(seen);
+  m.acc /= SC<double>(seen);
   return m;
 }
 
@@ -102,12 +105,15 @@ int main() {
 
     std::vector<dtype> onehot(lines * 10);
     for (size_t i = 0; i < lines; i++)
-      onehot[i * 10 + static_cast<size_t>(labels[i])] = 1;
+      onehot[i * 10 + SC<size_t>(labels[i])] = 1;
 
     X.set_dims(lines, 1, w, h).set_data(std::move(feats));
     Y.set_dims(lines, 10).set_data(std::move(onehot));
   }
 
+  // Both convolutions use padding 1 and stride 1, so the spatial extent stays
+  // 8x8 and Flatten hands the classifier 16 channels of 8x8. The classifier
+  // returns logits; Loss::ce applies softmax internally.
   Sequential model(
       // clang-format off
     Conv2d(1, 8, 3, { .padding = 1, .seed = 0 }),
@@ -117,8 +123,7 @@ int main() {
     BatchNorm2d(16),
     ReLU(),
     Flatten(),
-    Linear(16 * 8 * 8, 10, 0),
-    Softmax(1)
+    Linear(16 * 8 * 8, 10, 0)
       // clang-format on
   );
 

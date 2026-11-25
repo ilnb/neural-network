@@ -49,7 +49,7 @@ static std::vector<dtype> ref_bn(const Tensor &x, const std::vector<dtype> &g, c
         for (size_t k = 0; k < inner; k++)
           mu[c] += x.p->data[(ni * C + c) * inner + k];
     for (size_t c = 0; c < C; c++)
-      mu[c] /= static_cast<dtype>(n);
+      mu[c] /= SC<dtype>(n);
 
     for (size_t ni = 0; ni < N; ni++)
       for (size_t c = 0; c < C; c++)
@@ -58,7 +58,7 @@ static std::vector<dtype> ref_bn(const Tensor &x, const std::vector<dtype> &g, c
           var[c] += d * d;
         }
     for (size_t c = 0; c < C; c++)
-      var[c] /= static_cast<dtype>(n);
+      var[c] /= SC<dtype>(n);
   }
 
   std::vector<dtype> y(x.p->num_el);

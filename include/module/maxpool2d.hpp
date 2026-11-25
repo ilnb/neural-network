@@ -3,7 +3,7 @@
 #include "module/base.hpp"
 
 namespace NN {
-  struct MaxPool2d : Module {
+  struct MaxPool2d : Stateless {
     struct Config {
       // 0 means use kernel size
       size_t stride_h = 0;
@@ -23,8 +23,6 @@ namespace NN {
 
     explicit MaxPool2d(size_t kernel) : MaxPool2d(kernel, kernel) {}
 
-    std::vector<Tensor> params() const override { return {}; }
-
-    Tensor forward(const Tensor &x) override;
+    [[nodiscard]] Tensor forward(const Tensor &x) override;
   };
 } // namespace NN

@@ -1,4 +1,5 @@
 assets/digits.csv
 assets/mnist*
 build/
+saves/
 compile_commands.json

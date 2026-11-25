@@ -72,7 +72,8 @@ namespace NN {
       beta.set_requires_grad(true);
     }
 
-    std::vector<Tensor> params() const override { return { gamma, beta }; }
+    std::vector<NamedTensor> named_params() const override;
+    std::vector<NamedTensor> named_buffers() const override;
 
     Tensor forward(const Tensor &x) final;
 

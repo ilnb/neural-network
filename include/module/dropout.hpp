@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <vector>
 
+using NN::Autograd::GradFn, NN::Autograd::accumulate;
+
 namespace NN {
   // Inverted dropout.
   //
@@ -23,21 +25,19 @@ namespace NN {
   //
   // Throws `std::invalid_argument` if `p` is not finite or lies outside
   // `[0, 1)`.
-  struct Dropout : Module {
+  struct Dropout : Stateless {
     dtype p;
     // Keep mask of the last forward; emptied once the backward node takes it.
     std::vector<bool> mask;
     std::mt19937 rng;
 
     // `seed` seeds the mask RNG; the default is nondeterministic.
-    Dropout(const dtype p, const uint32_t seed = std::random_device{}()) : p(p), rng(seed) {
-      if (!std::isfinite(p) || p < dtype(0) || p >= dtype(1))
+    Dropout(const dtype p, const u32 seed = std::random_device{}()) : p(p), rng(seed) {
+      if (!std::isfinite(p) || p < SC<dtype>(0) || p >= SC<dtype>(1))
         throw std::invalid_argument(std::format("Dropout: probability {} must be in [0, 1)).", p));
     }
 
-    std::vector<Tensor> params() const override { return {}; }
-
-    Tensor forward(const Tensor &x) override {
+    [[nodiscard]] Tensor forward(const Tensor &x) override {
       if (!training or !p)
         return x;
 
@@ -45,16 +45,16 @@ namespace NN {
       mask.resize(x.p->num_el);
       std::bernoulli_distribution dist(p);
 
-      const dtype scale = dtype(1) / (dtype(1) - p);
+      const dtype scale = SC<dtype>(1) / (SC<dtype>(1) - p);
       auto &rd = r.p->data, &xd = x.p->data;
       for (size_t i = 0, n = x.p->num_el; i < n; i++) {
         const bool kept = !dist(rng);
         mask[i] = kept;
-        rd[i] = kept ? xd[i] * scale : dtype(0);
+        rd[i] = kept ? xd[i] * scale : SC<dtype>(0);
       }
 
       if (x.p->requires_grad) {
-        auto fn = std::make_shared<NN::Autograd::GradFn>();
+        auto fn = std::make_shared<GradFn>();
         fn->inputs = { x.p };
         fn->backward = [ap = x.p, mask = std::move(mask), scale](const Tensor &dz) {
           if (!ap->requires_grad)
@@ -63,7 +63,7 @@ namespace NN {
           auto &xd = dx.p->data, &zd = dz.p->data;
           for (size_t i = 0, n = ap->num_el; i < n; i++)
             xd[i] = zd[i] * mask[i] * scale;
-          Autograd::accumulate(*ap, dx);
+          accumulate(*ap, dx);
         };
         r.p->grad_fn = std::move(fn);
         r.p->requires_grad = true;

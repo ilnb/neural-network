@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <random>
 #include <ranges>
@@ -31,7 +30,7 @@ namespace NN::Data {
       // Discard a final partial batch.
       bool drop_last = false;
       // Seed of the shuffling RNG.
-      uint32_t seed = std::random_device{}();
+      u32 seed = std::random_device{}();
     };
 
     // The dataset, owned through the base so any `Dataset` can be passed.

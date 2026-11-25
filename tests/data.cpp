@@ -13,6 +13,7 @@
 #include <vector>
 
 namespace Data = NN::Data;
+using NN::SC;
 
 static void check_shape(const Tensor &t, std::initializer_list<size_t> want, const char *what) {
   const std::vector<size_t> w(want);
@@ -174,7 +175,7 @@ static void test_generic_dataset() {
   }
   check(batches == 2, "generic batch: ceil(4/3) batches");
 
-  auto [a, b] = static_cast<const Data::Dataset &>(c).batch(std::vector<size_t>{ 3, 1 });
+  auto [a, b] = SC<const Data::Dataset &>(c).batch(std::vector<size_t>{ 3, 1 });
   check_shape(a, { 2, 2, 2 }, "generic batch: explicit index list");
   check_data(b, { 3, 1 }, "generic batch: explicit index order");
 }
@@ -196,7 +197,7 @@ static void test_errors() {
   check_throws<std::invalid_argument>([&] { (void)Data::DataLoader(ds, { .batch_size = 0 }); }, "DataLoader: zero batch_size throws");
   check_throws<std::invalid_argument>([&] { (void)Data::DataLoader(ds, { .batch_size = 6, .drop_last = true }); }, "DataLoader: drop_last larger than the dataset throws");
   check_throws<std::invalid_argument>([&] { (void)ds.batch({}); }, "batch: empty index list throws");
-  check_throws<std::invalid_argument>([&] { (void)static_cast<const Data::Dataset &>(ds).batch({}); }, "Dataset::batch: empty index list throws");
+  check_throws<std::invalid_argument>([&] { (void)SC<const Data::Dataset &>(ds).batch({}); }, "Dataset::batch: empty index list throws");
 
   const Tensor empty;
   Tensor scalar(1);
