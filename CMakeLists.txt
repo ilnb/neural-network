@@ -24,6 +24,7 @@ add_library(neural SHARED
   src/module/conv_detail.cpp
   src/module/maxpool2d.cpp
   src/module/sequential.cpp
+  src/serial/checkpoint.cpp
 )
 
 add_compile_options(
